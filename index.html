@@ -230,7 +230,7 @@ function defaults(){
       {id:uid(),label:'パート（総務専任）',on:false,start:25,monthly:100000,init:180000,cap:0,note:'月額は仮置き'},
       {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,monthly:50000,init:0,cap:0,note:'月額は仮置き。調査立会いはOB本人の税理士登録が前提'}
     ],
-    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipFrom:''}
+    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0}
   };
 }
 function migrate(s){
@@ -251,7 +251,7 @@ function incomeTax(t){
   var B=[[1949000,.05,0],[3299000,.10,97500],[6949000,.20,427500],[8999000,.23,636000],[17999000,.33,1536000],[39999000,.40,2796000],[Infinity,.45,4796000]];
   for(var i=0;i<B.length;i++) if(t<=B[i][0]) return (t*B[i][1]-B[i][2])*1.021;
 }
-/* o.staff: 採用する人員を差し替える（比較用）／o.slip:{from:'YYYY-MM',months:n} その月以降の未完了の節目を遅らせる */
+/* o.staff: 採用する人員を差し替える（比較用）／o.slip:{from:'YYYY-MM',months:n,cost:円} その月以降の未完了の節目を遅らせ、追加支出を引く */
 function calcPlan(S,now,o){
   o=o||{};
   var ms=S.ms.map(function(m){return (o.slip&&!m.done&&ymN(m.ym)>=ymN(o.slip.from))?Object.assign({},m,{ym:ymAdd(m.ym,o.slip.months)}):m});
@@ -267,6 +267,7 @@ function calcPlan(S,now,o){
     var c=costAt(function(y){return y===ym}); bal-=c; accC+=c;
     pre.push({ym:ym,bal:bal});
   }
+  if(o.slip&&o.slip.cost>0){bal-=o.slip.cost;accC+=o.slip.cost;pre[pre.length-1].bal=bal}   // 遅れによる追加支出
   var projected=bal;
   var funds=S.sim.autoFunds?projected:S.sim.funds;
   var openCost=sum(S.openCosts,function(x){return x.amt});
@@ -368,13 +369,9 @@ roadmap:function(){
   return '<section><h2>現在地<small>'+ymL(nowYm())+' 時点</small></h2><div class="scroll"><table class="kv" data-out="summary"></table></div></section>'+
   '<section><h2>手元資金の推移<small>今日 → 開業 → 開業後</small></h2><div class="chart" id="chart"></div><p id="readout">グラフをなぞると、その月の残高が出ます。</p></section>'+
   '<section><h2>道のり<small>行をタップで編集・丸で完了</small></h2><ol class="tl" data-out="timeline"></ol><button class="add" data-act="add-ms">＋ 節目を追加</button></section>'+
-  '<section><h2>遅れた場合<small>試験の不合格など</small></h2>'+(function(){
-    var un=state.ms.filter(function(m){return !m.done}).sort(function(a,b){return ymN(a.ym)-ymN(b.ym)});
-    if(!un.length) return '<p class="note">未完了の節目がありません。</p>';
-    var cur=un.filter(function(m){return m.id===state.sim.slipFrom})[0]||un[0];
-    return '<label class="f" for="i_slip">どの節目から遅れるか<span class="inp"><select id="i_slip" data-b="sim.slipFrom" data-t="str">'+un.map(function(m){return '<option value="'+m.id+'"'+(m.id===cur.id?' selected':'')+'>'+esc(m.label)+'（'+ymL(m.ym)+'）</option>'}).join('')+'</select></span></label>'+
-      '<div class="scroll"><table data-out="slip"></table></div><p class="note">選んだ節目と、それより後の未完了の節目をまとめて後ろにずらします。遅れる間も積立は続く前提です。追加でかかる受験費用などは、節目の「支出」に入れてください。</p>';
-  })()+'</section>'+
+  '<section><h2>開業が遅れた場合<small>試験の不合格など</small></h2><div class="form">'+
+    inp('sim.slipCost','遅れる1年あたりの追加支出',{full:1,h:'予備校代・受験料・学費の延長など。0なら追加支出なし'})+
+    '</div><div class="scroll"><table data-out="slip"></table></div><p class="note">未完了の節目をすべて同じ期間だけ後ろにずらします。遅れる間も今の積立が続く前提なので、追加支出が積立より少なければ、開業時の資金は増えます。</p></section>'+
   '<section><h2>データ</h2><p class="note">貯蓄・積立・学費・パート月額などの初期値は例または仮置きです。ご自身の数字に置き換えてください。入力はこのブラウザの中にだけ保存されます。履歴の消去や機種変更に備えて、ときどきファイルに書き出してください。</p><div class="btns"><button data-act="export">計画をファイルに書き出す</button><button data-act="import">ファイルから読み込む</button><input type="file" id="imp" accept=".json,application/json" hidden><button data-act="copy">計画を引き継ぎテキストとしてコピー</button><button class="danger" data-act="reset">初期値に戻す</button></div></section>';
 },
 funds:function(){
@@ -455,12 +452,13 @@ timeline:function(C){
   }).join('');
 },
 slip:function(C){
-  var un=state.ms.filter(function(m){return !m.done}).sort(function(a,b){return ymN(a.ym)-ymN(b.ym)});
-  var from=un.filter(function(m){return m.id===state.sim.slipFrom})[0]||un[0]; if(!from) return '';
-  var cols=[['予定どおり',C],['1年遅れ',calc({slip:{from:from.ym,months:12}})],['2年遅れ',calc({slip:{from:from.ym,months:24}})]];
+  var k=state.sim.slipCost||0;
+  var cols=[['予定どおり',C],['1年遅れ',calc({slip:{from:C.now,months:12,cost:k}})],['2年遅れ',calc({slip:{from:C.now,months:24,cost:k*2}})]];
   var red=function(v,t){return '<span class="'+(v<0?'neg':'')+'">'+t+'</span>'};
   var R=[
     ['開業月',function(c){return ymL(c.open)+'<span class="memo">あと'+dur(c.preN)+'</span>'}],
+    ['遅れる間の積立',function(c){return yen(c.accM+c.accB-C.accM-C.accB)}],
+    ['遅れによる追加支出',function(c){return yen(-(c.accC-C.accC))}],
     ['開業時の見込み資金',function(c){return yen(c.funds+c.loan)}],
     ['必要な手元資金',function(c){return yen(c.required)}],
     ['過不足',function(c){return red(c.gap,yen(c.gap))}],

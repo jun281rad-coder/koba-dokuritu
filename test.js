@@ -119,6 +119,9 @@ eq('1年遅れの見込み資金', D.projected, 2950000 + 12 * 50000 + 200000);
 const D2 = calcPlan(S0, NOW, { slip: { from: '2030-11', months: 12 } });
 eq('登録申請から遅れる：開業月', D2.open, '2032-04');
 eq('登録申請から遅れる：学費は変わらない', D2.accC, 1600000);
+const D3 = calcPlan(S0, NOW, { slip: { from: NOW, months: 24, cost: 600000 } });
+eq('2年遅れ・追加支出あり：開業月', D3.open, '2033-04');
+eq('2年遅れ・追加支出あり：見込み資金', D3.projected, 2950000 + 24 * 50000 + 400000 - 600000);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

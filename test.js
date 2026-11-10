@@ -15,7 +15,7 @@ const NOW = '2026-11';
 // 引き継ぎ資料と同じ前提（解約なし・担当上限なし・税金なし）
 function base(mut) {
   const S = defaults();
-  Object.assign(S.sim, { churn: 0, ownerCap: 0, ctaxOn: false, itaxOn: false, kokuhoAuto: false });
+  Object.assign(S.sim, { churn: 0, ownerCap: 0, ctaxOn: false, itaxOn: false, kokuhoAuto: false, prevSalary: 0 });
   S.fixed = S.fixed.filter(x => !String(x.id).startsWith('p_'));
   S.fixed.push({ id: 't_anbun', g: 'その他雑費', label: '自宅按分', amt: 15000, note: '', pre: false });
   S.vars = []; S.sim.acqCost = 0;
@@ -61,7 +61,9 @@ eq('36か月目の件数', C.rows[35].clients, 40);
 eq('1か月目の収入', C.rows[0].rev, 150000);
 eq('1か月目の支出', C.rows[0].out, 385290);
 eq('12か月目の支出', C.rows[11].out, 385290);
-eq('13か月目の支出（前払い終了）', C.rows[12].out, 440217);
+eq('13か月目の支出（年払いの固定費をまとめて払う）', C.rows[12].out, 385290 + 54927 * 12);
+eq('14か月目の支出', C.rows[13].out, 385290);
+eq('2年目の固定費の合計は月額×12', C.rows.slice(12, 24).reduce((t, r) => t + r.fx, 0), 140217 * 12);
 eq('開業直後の残高', C.b0, 2900000 - 1233900);
 eq('残高の積み上げ', C.rows[35].bal, C.b0 + C.rows.reduce((t, r) => t + r.net, 0), 1);
 
@@ -111,9 +113,9 @@ eq('2031年 消費税', y31.ctax, 109350);
 eq('2031年 事業の利益', y31.profit, 2430000 - 85290 * 9 - 109350 - 1233900);
 eq('2031年 所得税等', y31.tax, 0);
 eq('2032年 売上', y32.rev, 7020000);
-eq('2032年 事業の利益', y32.profit, 7020000 - (85290 * 3 + 140217 * 9) - 315900);
-// 課税所得 5,186,277 − 650,000 − 580,000 ＝ 3,956,277
-eq('2032年 所得税等', y32.tax, 371338 + (3956277 + 150000) * 0.10 + (5186277 - 2900000) * 0.05, 1);
+eq('2032年 事業の利益', y32.profit, 7020000 - 140217 * 12 - 315900);   // 年払いの固定費は13か月目（2032年4月）に1年分を払う
+// 税引前所得 5,021,496 → 課税所得 5,021,496 − 650,000 − 580,000 ＝ 3,791,496
+eq('2032年 所得税等', y32.tax, (3791000 * 0.20 - 427500) * 1.021 + (3791496 + 150000) * 0.10 + (5021496 - 2900000) * 0.05, 1);
 eq('税金の合計', C.ctaxT + C.itaxT, C.rows.reduce((t, x) => t + x.tax, 0), 1);
 
 // --- 遅れた場合 ---
@@ -139,15 +141,16 @@ eq('必要件数 消費税あり 生活費込み', needClients(Sn, { living: tru
 Sn = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; });
 const nT = needClients(Sn, { living: true });
 // 手計算の確認：n件のとき 月の手残り ＝ 28,650n − 440,217 − 税額/12 が初めて0以上になる
-const left = n => { const rev = n * 360000, ct = rev * 0.045, inc = rev - ct - 140217 * 12, tx = inc - 1230000;
-  const tax = incomeTax(tx) + Math.max(0, tx + 150000) * 0.10 + Math.max(0, inc - 2900000) * 0.05; return n * 28650 - 440217 - tax / 12; };
+// 個人事業税は払う年の経費になるので、経費に入れた後の所得 base ＝ inc − 事業税 で所得税・住民税・事業税を計算する
+const left = n => { const rev = n * 360000, ct = rev * 0.045, inc = rev - ct - 140217 * 12, bt = Math.max(0, (inc - 2900000) * 0.05 / 1.05), bs = inc - bt, tx = bs - 1230000;
+  const tax = incomeTax(tx) + Math.max(0, tx + 150000) * 0.10 + Math.max(0, bs - 2900000) * 0.05; return n * 28650 - 440217 - tax / 12; };
 eq('必要件数 税金込み：その件数で黒字', left(nT) >= 0, true);
 eq('必要件数 税金込み：1件少ないと赤字', left(nT - 1) < 0, true);
 Sn = base(S => { S.sim.kessan = 180000; });            // 決算料あり・一括：毎月で見ると顧問料だけ、年間で見ると実効4.5万円
 eq('必要件数 決算料あり 顧問料だけで見る', needClients(Sn, { living: true, feeOnly: true }), 15);
 eq('必要件数 決算料あり 決算料込み', needClients(Sn, { living: true }), 10);   // 440,217 ÷ 45,000 = 9.78
 C = calcPlan(base(), NOW);
-eq('黒字が続き始める月（税金なし）', C.stableM, 9);     // 9か月目：13件×3万＝39万 ≥ 38.5万。13か月目以降も 17件×3万＝51万 ≥ 44万
+eq('黒字が続き始める月（税金なし）', C.stableM, 11);    // 年払いの固定費も月割にして判定する。15件×3万＝45万 ≥ 固定費14万＋生活費30万
 eq('1〜8か月目は赤字', C.rows.slice(0, 8).every(r => r.red), true);
 
 // --- 件数を決めたときの月の収支 ---
@@ -160,10 +163,11 @@ Mx = monthlyAt(base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; }), 18, {})
 eq('18件 消費税', Mx.ctax, 540000 * 0.045);
 eq('18件 事業の利益', Mx.biz, 540000 * 0.955 - 140217);
 // 事業の利益（年）4,505,796 → 課税所得 3,275,796 → 所得税 (3,275,000×10%−97,500)×1.021、住民税 342,580、事業税 80,290
-eq('18件 税額（月）', Mx.tax * 12, (3275000 * 0.10 - 97500) * 1.021 + (3275796 + 150000) * 0.10 + (4505796 - 2900000) * 0.05, 1);
+// 事業税 bt＝(4,505,796−2,900,000)×5%÷1.05＝76,466.5 を経費に入れた所得 4,429,329.5 → 課税所得 3,199,329.5
+eq('18件 税額（年）', Mx.tax * 12, (3199000 * 0.10 - 97500) * 1.021 + (3199329.5 + 150000) * 0.10 + 76466.5, 1);
 eq('18件 月の手残り', Mx.left, 540000 * 0.955 - 140217 - 300000 - Mx.tax, 1e-6);
 eq('18件は黒字', Mx.left >= 0, true);
-eq('17件は赤字', monthlyAt(base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; }), 17, {}).left < 0, true);
+eq('16件は赤字', monthlyAt(base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; }), 16, {}).left < 0, true);
 Mx = monthlyAt(base(S => { S.sim.kessan = 180000; }), 10, { staff: 100000 });
 eq('決算料は月の数字に入れない', Mx.left, 300000 - 140217 - 100000 - 300000);
 eq('決算料は年間に入る', Mx.annual, Mx.left * 12 + 1800000);
@@ -213,8 +217,8 @@ eq('整合：消費税', tot('ctax'), Mx.y.ctax, 1);
 eq('整合：固定費', tot('fx'), Mx.y.fix, 1);
 eq('整合：人件費', tot('staff'), Mx.y.staff, 1);
 eq('整合：税引前所得', Y2.profit, Mx.y.pre, 1);
-eq('整合：所得税等', Y2.tax, Mx.y.tax, 1);
-eq('整合：手残り＝年間の収支', tot('net'), Mx.y.left, 1);
+eq('整合：所得税等（前年の事業税を経費にする分だけずれる）', Y2.tax, Mx.y.tax, 20000);
+eq('整合：手残り＝年間の収支', tot('net'), Mx.y.left, 20000);
 eq('整合：運転資金の月額＝資金繰り表1か月目の支出', C.month1, C.rows[0].out - C.rows[0].init, 1e-6);
 eq('整合：運転資金に変動費と返済が入る', C.month1, 85290 + 30000 + 412000 + 300000 + 40000 + C.loanPay, 1e-6);
 eq('整合：必要な手元資金', C.required, 180000 + 6 * C.month1, 1e-6);
@@ -231,7 +235,7 @@ eq('給与所得 年収400万', salaryIncome(4000000), 4000000 - (800000 + 44000
 eq('給与所得 年収150万', salaryIncome(1500000), 850000);
 eq('給与所得 年収300万', salaryIncome(3000000), 3000000 - 980000);
 eq('給与所得 年収900万', salaryIncome(9000000), 9000000 - 1950000);
-const Sk = base(S => { S.sim.kokuhoAuto = true; });
+const Sk = base(S => { S.sim.kokuhoAuto = true; S.sim.prevSalary = 4000000; });
 // 所得276万 → 基礎控除後233万。医療 233万×8.61%＋20,550＋32,540、支援 233万×2.56%＋6,330＋10,010、子ども 233万×0.29%＋1,100＋1,000
 eq('国保 所得276万・1人・40歳未満', kokuhoAnnual(Sk, 2760000), 2330000 * (0.0861 + 0.0256 + 0.0029) + 20550 + 32540 + 6330 + 10010 + 1100 + 1000, 1e-6);
 eq('国保 所得0は均等割と平等割だけ', kokuhoAnnual(Sk, 0), 71530);
@@ -252,8 +256,8 @@ eq('損益表の国保年金（安定時）', Mx.m.kokuho, kokuhoAnnual(Sk, Mx.p
 eq('手入力に切り替えるとその金額', monthlyAt(base(S => { S.sim.kokuho = 40000; }), 20, {}).m.kokuho, 40000);
 // 社会保険料控除として税額に反映される
 const St2 = base(S => { S.sim.itaxOn = true; S.sim.kokuhoAuto = true; }), M2 = monthlyAt(St2, 20, {});
-const tx2 = M2.preY - 650000 - 580000 - M2.y.kokuho;
-eq('国保年金は所得から引いて税額を計算', M2.y.tax, incomeTax(tx2) + (tx2 + 150000) * 0.10 + Math.max(0, M2.preY - 2900000) * 0.05, 1);
+const bt2 = Math.max(0, (M2.preY - 2900000) * 0.05 / 1.05), tx2 = M2.preY - bt2 - 650000 - 580000 - M2.y.kokuho;
+eq('国保年金は所得から引いて税額を計算', M2.y.tax, incomeTax(tx2) + (tx2 + 150000) * 0.10 + bt2, 1);
 
 // --- 黒字の判定は決算料込みの年間で行い、表の手残りと食い違わないこと ---
 const Sm = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; S.sim.kessan = 150000; S.sim.kokuho = 20000; });
@@ -368,6 +372,41 @@ const v2 = defaults(); v2.v = 2; vet(v2).init = 211600;
 eq('移行v3：初期費用からClaude Pro年払いを外す', vet(migrate(JSON.parse(JSON.stringify(v2)))).init, 180000);
 const v2b = defaults(); v2b.v = 2; vet(v2b).init = 250000;
 eq('移行v3：自分で直した初期費用は変えない', vet(migrate(JSON.parse(JSON.stringify(v2b)))).init, 250000);
+
+// --- 独立チェックで見つかった点 ---
+// (1) 試算が年の途中で終わる年：一括入金の決算料を年換算で何倍にもしない
+const Sp1 = base(S => { Object.assign(S.sim, { clients: 20, growth: 0, kessan: 180000, itaxOn: true, ctaxOn: true }); });   // 4月開業・36か月 → 最終年は2034年1〜3月
+const Cl = calcPlan(Sp1, NOW), Ca = calcPlan(base(S => { Object.assign(S.sim, { clients: 20, growth: 0, kessan: 180000, kessanMode: 'avg', itaxOn: true, ctaxOn: true }); }), NOW);
+eq('最終年（3か月）の税額は、月割の設定とほぼ同じ', Cl.years[3].tax, Ca.years[3].tax, 30000);
+eq('最終年の税額は前年の4分の1程度', Cl.years[3].tax < Cl.years[2].tax * 0.4, true);
+// (2) 決算料を当てにしない件数＝決算料0円のときの件数
+const Sf = base(S => { Object.assign(S.sim, { kessan: 180000, itaxOn: true, ctaxOn: true }); });
+eq('顧問料だけで見る件数＝決算料0円のときの件数', needClients(Sf, { living: true, feeOnly: true }), needClients(base(S => { Object.assign(S.sim, { itaxOn: true, ctaxOn: true }); }), { living: true }));
+eq('顧問料0・決算料ありでも件数が出る', needClients(base(S => { S.sim.fee = 0; S.sim.kessan = 600000; }), { living: true }) > 0, true);
+// (3) 国保：前年の赤字を繰り越した後の所得で決める。開業年の赤字は退職前の給与と通算する
+const Sk3 = base(S => { Object.assign(S.sim, { kokuhoAuto: true, prevSalary: 4000000 }); });
+const Ck = calcPlan(Sk3, NOW);                          // 2031年：事業は青色控除後0（黒字31.9万）、給与は1〜3月分100万 → 所得35万
+eq('2032年度の国保は開業年の所得（給与35万＋事業0）で決まる', Ck.rows[12].kokuho, kokuhoAnnual(Sk3, 350000) / 12 + 17920, 1e-6);
+const Sk4 = base(S => { S.ms.find(m => m.kind === 'open').ym = '2031-10'; Object.assign(S.sim, { kokuhoAuto: true, prevSalary: 4000000, clients: 0 }); });
+const Ck4 = calcPlan(Sk4, NOW), loss31 = Ck4.years[0].profit;   // 10月開業・顧問先0件 → 開業年は赤字
+eq('開業年の赤字は給与所得と通算して国保を決める', Ck4.rows[6].kokuho, kokuhoAnnual(Sk4, Math.max(0, salaryIncome(3000000) + loss31)) / 12 + 17920, 1e-6);   // 2032年4月
+// (4) 開業後の日付の節目の支出も資金繰りに入る
+const So = base(S => { S.ms.push({ id: 'x', label: '車の買い替え', ym: '2031-10', cost: 500000, done: false, note: '', kind: '' }); });
+eq('開業後の節目の支出', calcPlan(So, NOW).rows[6].out, calcPlan(base(), NOW).rows[6].out + 500000);
+eq('開業後の節目の支出で残高が減る', calcPlan(So, NOW).rows[35].bal, calcPlan(base(), NOW).rows[35].bal - 500000, 1e-6);
+// (5) 退職前の給与にかかる住民税（開業年の6月〜翌年5月）
+const Sr2 = base(S => { Object.assign(S.sim, { itaxOn: true, prevSalary: 4000000 }); }), Cr = calcPlan(Sr2, NOW);
+const res = (2760000 - 430000 - 4000000 * 0.145) * 0.10 + 5000;   // 180,000
+eq('住民税：4・5月はなし', Cr.rows[1].prevRes, 0);
+eq('住民税：6月から月割', Cr.rows[2].prevRes, res / 12, 1e-6);
+eq('住民税：翌年5月まで払う', Cr.rows[13].prevRes > 0, true);
+eq('住民税：翌年6月からはなし', Cr.rows[14].prevRes, 0);
+eq('住民税：12か月の合計', Cr.rows.reduce((t, r) => t + r.prevRes, 0), res, 1e-6);
+// (6) 個人事業税は翌年の経費になる
+const Sb = base(S => { Object.assign(S.sim, { clients: 40, growth: 0, itaxOn: true }); S.ms.find(m => m.kind === 'open').ym = '2031-01'; S.openCosts = []; });
+const Cb = calcPlan(Sb, NOW), bt31 = Math.max(0, Cb.years[0].profit - 2900000) * 0.05;
+const tx32 = Cb.years[1].profit - bt31 - 650000 - 580000;
+eq('2年目の税額は、前年の事業税を経費にした所得で計算', Cb.years[1].tax, incomeTax(tx32) + (tx32 + 150000) * 0.10 + Math.max(0, Cb.years[1].profit - bt31 - 2900000) * 0.05, 1);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

@@ -3,8 +3,8 @@
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/app.html', 'utf8');
 const block = src.slice(src.indexOf('/*CALC-START*/'), src.indexOf('/*CALC-END*/'));
-const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt, kokuhoAnnual, salaryIncome, staffCost } =
-  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt,kokuhoAnnual,salaryIncome,staffCost};')();
+const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt, kokuhoAnnual, salaryIncome, staffCost, varUnit } =
+  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt,kokuhoAnnual,salaryIncome,staffCost,varUnit};')();
 
 let pass = 0, fail = 0;
 function eq(name, got, want, tol = 0.5) {
@@ -16,6 +16,10 @@ const NOW = '2026-11';
 function base(mut) {
   const S = defaults();
   Object.assign(S.sim, { churn: 0, ownerCap: 0, ctaxOn: false, itaxOn: false, kokuhoAuto: false });
+  S.fixed = S.fixed.filter(x => !String(x.id).startsWith('p_'));
+  S.fixed.push({ id: 't_anbun', g: 'その他雑費', label: '自宅按分', amt: 15000, note: '', pre: false });
+  S.vars = []; S.sim.acqCost = 0;
+  S.staff.forEach(x => { x.welfare = 0; x.monthly = staffCost(x); });
   if (mut) mut(S);
   return S;
 }
@@ -265,13 +269,44 @@ eq('資料の提示額：月給25万・賞与なし', staffCost({ salary: 250000
 eq('賞与4か月', staffCost({ salary: 300000, bonusMonths: 4, shaho: 15, tools: 9500 }), 400000 * 1.15 + 9500);
 eq('パート：社保なし', staffCost({ salary: 90000, bonusMonths: 0, shaho: 0, tools: 10000 }), 100000);
 defaults().staff.forEach(x => eq('初期値の月額は自動計算と一致 ' + x.label, x.monthly, staffCost(x)));
-const oldS = defaults(); oldS.staff.forEach(x => { delete x.salary; delete x.bonusMonths; delete x.shaho; delete x.tools; });
+const oldS = defaults(); oldS.staff.forEach(x => { delete x.salary; delete x.bonusMonths; delete x.shaho; delete x.tools; delete x.welfare; });
+vet(oldS).monthly = 412000;                           // 月給などの内訳を持つ前の保存データ
 oldS.staff[0].monthly = 123456;                        // 以前に手で直していた月額はそのまま残す
 const MS = migrate(JSON.parse(JSON.stringify(oldS)));
 eq('移行：ベテランの月給', vet(MS).salary, 300000);
 eq('移行：ベテランの総コスト', vet(MS).monthly, 412000);
 eq('移行：手で直した月額は変わらない', MS.staff[0].monthly, 123456);
 eq('移行：手で直した行は月給に入る', MS.staff[0].salary, 123456);
+
+// --- 仮置きで足した費用（按分なし・旅費交通費など・変動費の一覧・新規獲得費・福利厚生） ---
+const Dn = defaults(), CDn = calcPlan(Dn, NOW);
+eq('初期値：自宅按分は入れない', Dn.fixed.some(x => x.label === '自宅按分'), false);
+eq('初期値：月の固定費', CDn.fixedBase, 140217 - 15000 + 15000 + 10000 + 5000 + 3000 + 3000 + 2000);   // 163,217
+eq('初期値：1件あたりの変動費', varUnit(Dn), 850);
+eq('初期値：ベテランの総コスト', vet(Dn).monthly, 421000);
+const Sq = base(S => { S.vars = [{ id: 'a', label: 'x', amt: 850, note: '' }]; S.sim.acqCost = 50000; S.sim.churn = 12; });
+C = calcPlan(Sq, NOW);
+eq('変動費：1か月目は5件×850円、獲得費なし', C.rows[0].vr, 5 * 850);
+eq('変動費：2か月目は件数×850円＋新規1件の獲得費', C.rows[1].vr, C.rows[1].clients * 850 + 50000, 1e-6);
+eq('獲得費は税引前所得から引かれる', C.years[0].profit, C.years[0].rev - C.years[0].rows.reduce((t, r) => t + r.fx + r.vr, 0) - 1233900, 1e-6);
+Mx = monthlyAt(Sq, 20, {});
+eq('安定時の獲得費＝解約分の補充', Mx.y.acq, 20 * (1 - Math.pow(0.88, 1 / 12)) * 50000 * 12, 1e-6);
+eq('安定時の変動費', Mx.y.varc, 20 * 850 * 12);
+eq('税引前＝売上−変動費−獲得費−固定費', Mx.y.sales - Mx.y.varc - Mx.y.acq - Mx.y.ctax - Mx.y.fix - Mx.y.staff, Mx.y.pre, 1e-6);
+// 解約と同じ数だけ毎月新規を取る安定状態では、資金繰り表と損益表の変動費が一致する
+const Sr = base(S => { S.ms.find(m => m.kind === 'open').ym = '2031-01'; S.openCosts = []; S.vars = [{ id: 'a', label: 'x', amt: 850, note: '' }];
+  Object.assign(S.sim, { clients: 20, churn: 12, acqCost: 50000, growth: 20 * (1 - Math.pow(0.88, 1 / 12)) }); });
+C = calcPlan(Sr, NOW);
+eq('整合：安定時の変動費＋獲得費', C.years[1].rows.reduce((t, r) => t + r.vr, 0), monthlyAt(Sr, 20, {}).y.varc + monthlyAt(Sr, 20, {}).y.acq, 1);
+eq('福利厚生が総コストに入る', staffCost({ salary: 300000, bonusMonths: 2, shaho: 15, tools: 9500, welfare: 9000 }), 421000);
+// 第1版の保存データ（按分あり・変動費の一覧なし）からの移行
+const v1 = base(S => { S.sim.varCost = 300; }); v1.v = 1; delete v1.vars; v1.staff.forEach(x => delete x.welfare);
+const M2v = migrate(JSON.parse(JSON.stringify(v1)));
+eq('移行v2：自宅按分を外す', M2v.fixed.some(x => x.label === '自宅按分'), false);
+eq('移行v2：仮置きの固定費を足す', M2v.fixed.filter(x => String(x.id).startsWith('p_')).length, 6);
+eq('移行v2：以前の変動費は一覧に移す', varUnit(M2v), 850 + 300);
+eq('移行v2：ベテランに福利厚生', vet(M2v).monthly, 421000);
+eq('移行v2：2回かけても増えない', migrate(JSON.parse(JSON.stringify(M2v))).fixed.length, M2v.fixed.length);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

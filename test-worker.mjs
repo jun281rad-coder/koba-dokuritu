@@ -50,9 +50,9 @@ eq('CORS', (await call(TOKEN + '/api/plan')).headers.get('access-control-allow-o
 // --- 読む ---
 let g = (await tool('get_plan')).out;
 eq('開業費用', g.results.opening_cost, 1233900);
-eq('月の固定費', g.results.monthly_fixed_cost, 140217);
-eq('必要な手元資金', g.results.required_funds, 3822434);   // 3,545,640 ＋ 6か月 ×（国保 338,548÷12 ＋ 年金 17,920）
-eq('損益分岐 3万円', g.results.break_even_clients_by_price.owner_only['30000'], { income_before_tax_in_black: 5, cash_left_positive_after_living_and_tax: 20 });   // 国保・年金を自動計算に入れた件数
+eq('月の固定費', g.results.monthly_fixed_cost, 163217);   // 資料の140,217 − 自宅按分15,000 ＋ 仮置きの費用38,000
+eq('必要な手元資金', g.results.required_funds, 3985934);   // 開業費用 ＋ 6か月 ×（固定費108,290 ＋ 変動費4,250 ＋ 生活費30万 ＋ 国保年金46,132）
+eq('損益分岐 3万円', g.results.break_even_clients_by_price.owner_only['30000'], { income_before_tax_in_black: 6, cash_left_positive_after_living_and_tax: 21 });   // 国保・年金を自動計算に入れた件数
 eq('節目の数', g.milestones.length, 11);
 eq('開業の節目', g.milestones.filter(m => m.is_opening).map(m => m.ym), ['2031-04']);
 const cf = (await tool('get_cashflow')).out;
@@ -82,22 +82,26 @@ u = await tool('upsert_item', { list: 'milestones', id: openId, fields: { ym: '2
 eq('開業月の変更', u.out.results.opening_month, '2032-04');
 eq('ymの形式違い', (await tool('upsert_item', { list: 'milestones', id: openId, fields: { ym: '2032/4' } })).err, true);
 u = await tool('upsert_item', { list: 'fixed_costs', fields: { label: 'プリンター消耗品', amount: 2000, prepaid: false } });
-eq('固定費の追加', u.out.results.monthly_fixed_cost, 142217);
+eq('固定費の追加', u.out.results.monthly_fixed_cost, 165217);
 const newId = u.out.id;
 eq('追加した行', u.out.item.label, 'プリンター消耗品');
 eq('ラベルなしの追加', (await tool('upsert_item', { list: 'fixed_costs', fields: { amount: 1 } })).err, true);
 eq('無いid', (await tool('upsert_item', { list: 'staff', id: 'zzz', fields: { planned: true } })).err, true);
 const vetId = (await tool('get_plan')).out.staff.find(x => /ベテラン/.test(x.label)).id;
 u = await tool('upsert_item', { list: 'staff', id: vetId, fields: { planned: true, start: 1 } });
-eq('ベテランを開業時から', u.out.results.staff_monthly_cost_planned, 412000);
+eq('ベテランを開業時から', u.out.results.staff_monthly_cost_planned, 421000);
 u = await tool('upsert_item', { list: 'staff', id: vetId, fields: { salary: 250000, bonus_months: 0 } });
-eq('月給と賞与月数から総コストを自動計算', u.out.item.monthly_total_cost, 250000 * 1.15 + 9500);
+eq('月給と賞与月数から総コストを自動計算', u.out.item.monthly_total_cost, 250000 * 1.15 + 9500 + 9000);
 eq('総コストは直接は書き換えられない', (await tool('upsert_item', { list: 'staff', id: vetId, fields: { monthly: 1 } })).err, true);
 u = await tool('upsert_item', { list: 'staff', fields: { label: '記帳スタッフ', salary: 200000, bonus_months: 1, social_insurance_rate: 15, tools: 10000, planned: false } });
 eq('新規の人員も自動計算', u.out.item.monthly_total_cost, Math.round(200000 * (1 + 1 / 12) * 1.15 + 10000));
 await tool('upsert_item', { list: 'staff', id: vetId, fields: { salary: 300000, bonus_months: 2 } });
 u = await tool('delete_item', { list: 'fixed_costs', id: newId });
-eq('固定費の削除', u.out.results.monthly_fixed_cost, 140217);
+eq('固定費の削除', u.out.results.monthly_fixed_cost, 163217);
+u = await tool('upsert_item', { list: 'variable_costs', fields: { label: '外注費', amount: 300 } });
+eq('変動費の追加', (await tool('get_plan')).out.variable_costs.reduce((t, x) => t + x.amount, 0), 1150);
+await tool('delete_item', { list: 'variable_costs', id: u.out.id });
+eq('福利厚生も書き換えられる', (await tool('upsert_item', { list: 'staff', id: vetId, fields: { welfare: 9000 } })).out.item.monthly_total_cost, 421000);
 eq('開業の節目は削除できない', (await tool('delete_item', { list: 'milestones', id: openId })).err, true);
 eq('未知のツール', (await rpc('tools/call', { name: 'nope', arguments: {} })).error.code, -32602);
 

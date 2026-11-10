@@ -30,7 +30,7 @@ const SIM = {
   churn: N('年間の解約率（%）'),
   ownerCap: N('所長が担当できる件数。0で上限なし'),
   fee: N('顧問料の月額単価（円・税込）'),
-  varCost: N('変動費（顧問先1件あたり・月・円）。外注費・口座振替手数料・紹介手数料など'),
+  acqCost: N('新規1件あたりの獲得費（円）。紹介サイトの成果報酬など。開業時の顧問先にはかからない'),
   kessan: N('決算料（1件あたり年1回・円）'),
   kessanMode: { type: 'string', enum: ['lump', 'avg'], description: '決算料の入金。lump=契約12か月目に一括、avg=毎月に均す' },
   living: N('生活費（月・円）'),
@@ -65,10 +65,12 @@ const LISTS = {
   fixed_costs: { key: 'fixed', label: '月の固定費', fields: {
     group: ['g', S('区分（システム代・その他雑費 など）')], label: ['label', S('項目')], amount: ['amt', N('月額（円）')],
     note: ['note', S('メモ')], prepaid: ['pre', B('初年度分を開業費用で前払いしているか。trueなら開業1〜12か月目は支出に入れない')] } },
+  variable_costs: { key: 'vars', label: '変動費', fields: {
+    label: ['label', S('項目')], amount: ['amt', N('顧問先1件あたり・月の金額（円）')], note: ['note', S('メモ')] } },
   staff: { key: 'staff', label: '人員', fields: {
     label: ['label', S('役割')], planned: ['on', B('計画に入れる（採用する）か')], start: ['start', N('採用する月。開業月を1とする')],
     salary: ['salary', N('月給（額面・円）')], bonus_months: ['bonusMonths', N('賞与（年間の月数。例：2）')],
-    social_insurance_rate: ['shaho', N('社会保険の会社負担（%）。加入するなら約15、短時間のパートや外注は0')], tools: ['tools', N('ツール代（月・円）')], init: ['init', N('採用時の初期費用（円）')],
+    social_insurance_rate: ['shaho', N('社会保険の会社負担（%）。加入するなら約15、短時間のパートや外注は0')], tools: ['tools', N('ツール代（月・円）')], welfare: ['welfare', N('福利厚生（月・円）。健診の月割・退職金の掛金・在宅手当など')], init: ['init', N('採用時の初期費用（円）')],
     cap: ['cap', N('担当できる顧問先数（件）')], note: ['note', S('メモ')] } },
 };
 const props = spec => Object.fromEntries(Object.entries(spec).map(([k, v]) => [k, Array.isArray(v) ? v[1] : v]));
@@ -93,15 +95,15 @@ const TOOLS = [
     description: '計画の前提（開業までの積立、開業後の顧問先数・単価・生活費・税金・借入など）を書き換えて保存する。変更する項目だけを渡す。持ち主のスマホの画面にも反映される。持ち主が変更を頼んだときだけ使う。',
     inputSchema: { type: 'object', properties: { settings: SETTINGS_SCHEMA }, required: ['settings'], additionalProperties: false } },
   { name: 'upsert_item',
-    description: '節目・開業費用・月の固定費・人員の1行を追加または変更して保存する。id を渡すとその行を変更し、省くと新しい行を追加する。id は get_plan で分かる。開業予定月を変えるには、milestones の is_opening が true の行の ym を変える。',
+    description: '節目・開業費用・月の固定費・変動費・人員の1行を追加または変更して保存する。id を渡すとその行を変更し、省くと新しい行を追加する。id は get_plan で分かる。開業予定月を変えるには、milestones の is_opening が true の行の ym を変える。',
     inputSchema: { type: 'object', properties: {
-      list: { type: 'string', enum: Object.keys(LISTS), description: 'milestones=節目、open_costs=開業費用、fixed_costs=月の固定費、staff=人員' },
+      list: { type: 'string', enum: Object.keys(LISTS), description: 'milestones=節目、open_costs=開業費用、fixed_costs=月の固定費、variable_costs=変動費（顧問先1件あたり・月）、staff=人員' },
       id: S('変更する行の id。新規追加のときは省く'),
       fields: { type: 'object', description: '変更する項目だけを入れる。list ごとに使える項目： ' +
         Object.entries(LISTS).map(([k, v]) => k + '（' + Object.entries(v.fields).map(([f, x]) => f + '=' + x[1].description).join('、') + '）').join(' ／ ') } },
       required: ['list', 'fields'], additionalProperties: false } },
   { name: 'delete_item',
-    description: '節目・開業費用・月の固定費・人員の1行を削除して保存する。開業の節目は削除できない。持ち主が削除を頼んだときだけ使う。',
+    description: '節目・開業費用・月の固定費・変動費・人員の1行を削除して保存する。開業の節目は削除できない。持ち主が削除を頼んだときだけ使う。',
     inputSchema: { type: 'object', properties: {
       list: { type: 'string', enum: Object.keys(LISTS) }, id: S('削除する行の id') }, required: ['list', 'id'], additionalProperties: false } },
 ];
@@ -131,7 +133,7 @@ function results(C, plan) {
     effective_monthly_price: round(C.price),
     clients_needed_for_cash_to_grow_every_month: { owner_only: needClients(plan, { living: true }), with_planned_staff: needClients(plan, { staff: C.staffMAll, living: true }), note: '生活費・税金込み。2年目以降の固定費で計算' },
     clients_needed_for_business_in_black: { owner_only: needClients(plan, {}), with_planned_staff: needClients(plan, { staff: C.staffMAll }) },
-    annual_profit_and_loss_by_client_count: [5, 10, 15, 20, 25, 30, 40, 50].map(n => { const M = monthlyAt(plan, n, { staff: C.staffMAll }); return { clients: n, sales: round(M.salesY), variable_costs_incl_consumption_tax: round(M.varM * 12 + M.ctaxY), fixed_costs_incl_staff: round((M.fixed + M.staff) * 12), income_before_tax: round(M.preY), income_after_tax: round(M.afterY), cash_left_after_living: round(M.annual) }; }),
+    annual_profit_and_loss_by_client_count: [5, 10, 15, 20, 25, 30, 40, 50].map(n => { const M = monthlyAt(plan, n, { staff: C.staffMAll }); return { clients: n, sales: round(M.salesY), variable_costs_incl_acquisition_and_consumption_tax: round(M.y.varc + M.y.acq + M.y.ctax), fixed_costs_incl_staff: round((M.fixed + M.staff) * 12), income_before_tax: round(M.preY), income_after_tax: round(M.afterY), cash_left_after_living: round(M.annual) }; }),
     month_black_becomes_stable: C.stableM || null,
     first_month_in_black_incl_living_and_tax: C.firstBlack || null,
     first_month_business_in_black: C.firstBiz || null,
@@ -159,7 +161,7 @@ function planOut(plan) {
     as_of: nowJst(), unit: '円（税込）。△の代わりに負の数で表す', last_updated: new Date(plan.updatedAt || 0).toISOString(),
     settings: { pre: plan.pre, sim: Object.fromEntries(Object.keys(SIM).map(k => [k, plan.sim[k]])) },
     milestones: listOut(plan, 'milestones').sort((a, b) => a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : 0),
-    open_costs: listOut(plan, 'open_costs'), fixed_costs: listOut(plan, 'fixed_costs'), staff: listOut(plan, 'staff'),
+    open_costs: listOut(plan, 'open_costs'), fixed_costs: listOut(plan, 'fixed_costs'), variable_costs: listOut(plan, 'variable_costs'), staff: listOut(plan, 'staff'),
     results: results(C, plan),
     notes: '税金は概算。納税は当年の各月に均している。初期値には仮置きの数字が含まれる（各行の note を参照）。',
   };
@@ -208,7 +210,7 @@ function applyItem(plan, a) {
   } else {
     if (!vals.label) throw new Error('新しい行には label が必要です');
     const base = { milestones: { ym: nowJst(), done: false, cost: 0, note: '', kind: '' }, open_costs: { g: 'その他', amt: 0, note: '' },
-      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, staff: { on: true, start: 13, salary: 0, bonusMonths: 0, shaho: 0, tools: 0, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
+      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, variable_costs: { amt: 0, note: '' }, staff: { on: true, start: 13, salary: 0, bonusMonths: 0, shaho: 0, tools: 0, welfare: 0, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
     row = Object.assign({ id: uid() }, base, vals);
     arr.push(row);
   }

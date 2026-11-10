@@ -27,11 +27,26 @@ var cls=function(n){return n<0?' neg':''};
 var toNum=function(s){var v=parseFloat(String(s).replace(/[,，\s円]/g,'').replace(/[０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-65248)}).replace(/^△/,'-'));return isFinite(v)?v:0};
 
 /* ---------- 初期値（引き継ぎ資料の数字） ---------- */
+/* 引き継ぎ資料に無かった費用。金額はすべて仮置き。id を固定して、保存済みの計画にも同じ行を足せるようにする */
+var PROV_FIXED=[
+  {id:'p_travel',g:'その他雑費',label:'旅費交通費・車両費',amt:15000,note:'仮置き。訪問のガソリン・駐車場・車の維持費',pre:false},
+  {id:'p_enter',g:'その他雑費',label:'接待交際費・会議費',amt:10000,note:'仮置き。紹介者へのお礼・会食',pre:false},
+  {id:'p_train',g:'その他雑費',label:'研修費',amt:5000,note:'仮置き。年36時間の研修受講義務',pre:false},
+  {id:'p_renew',g:'その他雑費',label:'機器の更新積立',amt:3000,note:'仮置き。PCを4〜5年で買い替え',pre:false},
+  {id:'p_tatsu',g:'システム代',label:'達人の追加ソフト',amt:3000,note:'仮置き・要見積。年末調整・法定調書など',pre:false},
+  {id:'p_chat',g:'システム代',label:'顧問先との連絡手段・電子契約',amt:2000,note:'仮置き。チャットの有料プランなど',pre:false}
+];
+var PROV_VARS=[
+  {id:'p_v_bank',label:'口座振替の件数手数料',amt:150,note:'仮置き。引落し1件ごと'},
+  {id:'p_v_api',label:'AIのAPI利用料',amt:500,note:'仮置き。記帳自動化などの処理量に比例'},
+  {id:'p_v_post',label:'郵送・印刷',amt:200,note:'仮置き。資料の返却・申告書控え・請求書'}
+];
+var copyRow=function(x){return Object.assign({},x)};
 function defaults(){
   var oc=function(g,label,amt,note){return {id:uid(),g:g,label:label,amt:amt,note:note||''}};
   var fx=function(g,label,amt,note){return {id:uid(),g:g,label:label,amt:amt,note:note||'',pre:/達人|弥生|税務通信|Google Workspace|セキュリティ|本会会費|支部会費|税賠/.test(label)}};
   var ms=function(label,ym,cost,note,kind){return {id:uid(),label:label,ym:ym,done:false,cost:cost||0,note:note||'',kind:kind||''}};
-  return {v:1,updatedAt:0,
+  return {v:2,updatedAt:0,
     pre:{savings:1000000,monthly:50000,bonus:200000},
     ms:[
       ms('簿記論 合格','2027-12',0,'合格発表の月を入れる'),
@@ -77,18 +92,18 @@ function defaults(){
       fx('その他雑費','支部会費',5000,'仮置き'),
       fx('その他雑費','税賠保険',4170),
       fx('その他雑費','通信費',8000),
-      fx('その他雑費','自宅按分',15000),
       fx('その他雑費','HP保守',6490),
       fx('その他雑費','書籍・消耗品',5000),
-      fx('その他雑費','集客費',30000,'紹介中心＋成果報酬型サイト')
-    ],
+      fx('その他雑費','集客費',30000,'紹介中心＋広告。紹介サイトの成果報酬は「開業後」タブの新規獲得費で別に計算')
+    ].concat(PROV_FIXED.map(copyRow)),
+    vars:PROV_VARS.map(copyRow),
     staff:[
       {id:uid(),label:'パート（記帳＋総務兼務）',on:false,start:7,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:10,note:'月給・担当件数は仮置き。短時間勤務で社会保険なしの想定'},
-      {id:uid(),label:'ベテラン社員',on:false,start:13,salary:300000,bonusMonths:2,shaho:15,tools:9500,monthly:412000,init:211600,cap:30,note:'初期費用はPC等18万＋Claude Pro年払い'},
+      {id:uid(),label:'ベテラン社員',on:false,start:13,salary:300000,bonusMonths:2,shaho:15,tools:9500,welfare:9000,monthly:421000,init:211600,cap:30,note:'初期費用はPC等18万＋Claude Pro年払い。福利厚生は仮置き（健診・退職金掛金・在宅手当）'},
       {id:uid(),label:'パート（総務専任）',on:false,start:25,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:0,note:'月給は仮置き。短時間勤務で社会保険なしの想定'},
       {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,salary:50000,bonusMonths:0,shaho:0,tools:0,monthly:50000,init:0,cap:0,note:'報酬は仮置き。調査立会いはOB本人の税理士登録が前提'}
     ],
-    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0,varCost:0,kokuhoAuto:true,prevSalary:4000000,khAge40:false,khMembers:1,nenkin:17920}
+    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0,varCost:0,acqCost:50000,kokuhoAuto:true,prevSalary:4000000,khAge40:false,khMembers:1,nenkin:17920}
   };
 }
 function migrate(s){
@@ -97,8 +112,19 @@ function migrate(s){
   ['ms','openCosts','fixed','staff'].forEach(function(k){if(!Array.isArray(s[k])) s[k]=d[k]});
   if(!s.ms.some(function(m){return m.kind==='open'})) s.ms.push(d.ms[d.ms.length-1]);
   s.ms.forEach(function(m){if(!okYm(m.ym)) m.ym=nowYm()});
-  s.fixed.forEach(function(x){if(typeof x.pre!=='boolean') x.pre=/達人|弥生|税務通信|Google Workspace|セキュリティ|本会会費|支部会費|税賠/.test(x.label)});
+  s.fixed.forEach(function(x){if(typeof x.pre!=='boolean') x.pre=!/^p_/.test(String(x.id))&&/達人|弥生|税務通信|Google Workspace|セキュリティ|本会会費|支部会費|税賠/.test(x.label)});
   s.staff.forEach(function(x){if(typeof x.cap!=='number') x.cap=/ベテラン/.test(x.label)?30:/記帳/.test(x.label)?10:0});
+  // 第2版への移行：自宅按分を外し（節税上の扱いで現金は出ないため）、抜けていた費用を仮置きで足す
+  if((s.v||1)<2){
+    s.fixed=s.fixed.filter(function(x){return x.label!=='自宅按分'});
+    PROV_FIXED.forEach(function(a){if(!s.fixed.some(function(x){return x.id===a.id||x.label===a.label}))s.fixed.push(copyRow(a))});
+    if(!Array.isArray(s.vars)){
+      s.vars=PROV_VARS.map(copyRow);
+      if(s.sim.varCost>0){s.vars.push({id:'p_v_old',label:'その他の変動費',amt:s.sim.varCost,note:'以前の入力'});s.sim.varCost=0}
+    }
+    s.staff.forEach(function(x){if(typeof x.welfare!=='number'&&/ベテラン/.test(x.label))x.welfare=9000});
+  }
+  if(!Array.isArray(s.vars)) s.vars=[];
   // 月給・賞与月数から総コストを出す形への移行。以前の月額コストが変わらないように内訳を入れる
   s.staff.forEach(function(x){
     if(typeof x.salary!=='number'){
@@ -109,7 +135,7 @@ function migrate(s){
     }
     x.monthly=staffCost(x);
   });
-  s.updatedAt=s.updatedAt||0; s.v=1; return s;
+  s.updatedAt=s.updatedAt||0; s.v=2; return s;
 }
 /* ---------- 計算（画面に依存しない。test.js がこの範囲を取り出して検算する） ---------- */
 var sum=function(a,f){return a.reduce(function(t,x){return t+(f(x)||0)},0)};
@@ -119,12 +145,16 @@ function incomeTax(t){
   var B=[[1949000,.05,0],[3299000,.10,97500],[6949000,.20,427500],[8999000,.23,636000],[17999000,.33,1536000],[39999000,.40,2796000],[Infinity,.45,4796000]];
   for(var i=0;i<B.length;i++) if(t<=B[i][0]) return (t*B[i][1]-B[i][2])*1.021;
 }
-/* 人員1人の月の総コスト＝月給＋賞与の月割＋社会保険の会社負担＋ツール代
+/* 人員1人の月の総コスト＝月給＋賞与の月割＋社会保険の会社負担＋ツール代＋福利厚生
    社会保険は（月給＋賞与の月割）に掛ける。短時間のパートや外注は 0% */
 function staffCost(s){
   var pay=(s.salary||0)*(1+(s.bonusMonths||0)/12);
-  return Math.round(pay*(1+(s.shaho||0)/100)+(s.tools||0));
+  return Math.round(pay*(1+(s.shaho||0)/100)+(s.tools||0)+(s.welfare||0));
 }
+/* 顧問先1件あたりの変動費（月）＝変動費の一覧の合計 */
+function varUnit(S){return sum(S.vars||[],function(x){return x.amt})+(S.sim.varCost||0)}
+/* 月ごとの継続率（年間の解約率から） */
+function keepRate(S){return Math.pow(1-Math.min(0.99,Math.max(0,S.sim.churn||0)/100),1/12)}
 function loanPayment(S){
   var loan=Math.max(0,S.sim.loan),n=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200;
   return loan>0?(r>0?loan*r/(1-Math.pow(1+r,-n)):loan/n):0;
@@ -157,22 +187,23 @@ function annualTax(S,inc,mon,kokuhoY){
 /* 顧問先が n 件で安定したときの損益（2年目以降の固定費）。o.staff: 人件費の月額。金額はすべて円
    m＝月間、y＝年間。月間は年間の12分の1（決算料は顧問先ごとに決算月が違う前提で月平均にする）
    biz・left は、決算料を当てにせず顧問料だけで見た月の数字（控えめな見方に使う）
-   変動費＝1件あたりの変動費＋消費税の納税額（税込経理なので租税公課として費用に入る） */
+   変動費＝1件あたりの変動費＋解約分を補充する新規獲得費＋消費税の納税額（税込経理なので租税公課として費用に入る） */
 function monthlyAt(S,n,o){
   o=o||{};
   var fixed=sum(S.fixed,function(x){return x.amt}),staff=o.staff||0,c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
   var unit=o.price!=null?o.price:S.sim.fee,kes=o.price!=null?0:S.sim.kessan;   // o.price: 決算料込みの実効単価で計算する
-  var fee=n*unit,kessanY=n*kes,salesY=fee*12+kessanY,varM=n*(S.sim.varCost||0);
-  var biz=fee*(1-c)-varM-fixed-staff;                              // 税引前所得（月・決算料を除く）
+  var fee=n*unit,kessanY=n*kes,salesY=fee*12+kessanY,varM=n*varUnit(S);
+  var acqM=n*(1-keepRate(S))*Math.max(0,S.sim.acqCost||0);         // 解約で減る分を補充するための新規獲得費
+  var biz=fee*(1-c)-varM-acqM-fixed-staff;                         // 税引前所得（月・決算料を除く）
   var preY=biz*12+kessanY*(1-c);                                   // 税引前所得（年）
   // 国保・年金：自動なら、この所得が続いたときの国保料（札幌市）＋国民年金。手入力ならその金額
   var kk=S.sim.kokuhoAuto?kokuhoAnnual(S,Math.max(0,preY-650000))/12+(S.sim.nenkin||0):S.sim.kokuho;
   var taxY=annualTax(S,preY,12,kk*12),loanM=loanPayment(S);
   var left=biz-taxY/12-S.sim.living-kk-loanM;
   var k=kessanY/12;                                                // 月間は決算料を月平均で入れる（月間×12＝年間）
-  var y={sales:salesY,kessan:kessanY,varc:varM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
+  var y={sales:salesY,kessan:kessanY,varc:varM*12,acq:acqM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
     living:S.sim.living*12,kokuho:kk*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
-  var mm={sales:fee+k,kessan:k,varc:varM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
+  var mm={sales:fee+k,kessan:k,varc:varM,acq:acqM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
     living:S.sim.living,kokuho:kk,loan:loanM,left:left+k*(1-c)};
   return {m:mm,y:y,n:n,fee:fee,kessanY:kessanY,salesY:salesY,varM:varM,ctax:fee*c,ctaxY:salesY*c,fixed:fixed,staff:staff,
     biz:biz,preY:preY,bizAnnual:preY,tax:taxY/12,taxY:taxY,afterM:biz-taxY/12,afterY:preY-taxY,
@@ -215,7 +246,7 @@ function calcPlan(S,now,o){
   var staffM=function(m){return sum(staffOn,function(s){return s.start<=m?s.monthly:0})};
   var staffI=function(m){return sum(staffOn,function(s){return s.start===m?s.init:0})};
   var capAt=function(m){return S.sim.ownerCap>0?S.sim.ownerCap+sum(staffOn,function(s){return s.start<=m?(s.cap||0):0}):Infinity};
-  var keep=Math.pow(1-Math.min(0.99,Math.max(0,S.sim.churn||0)/100),1/12);   // 月ごとの継続率
+  var keep=keepRate(S),vu=varUnit(S),acqC=Math.max(0,S.sim.acqCost||0);
   var price=S.sim.fee+S.sim.kessan/12;
   var fixedAt=function(m){return sum(S.fixed,function(x){return (x.pre&&m<=12)?0:x.amt})};
   var lump=S.sim.kessanMode!=='avg';
@@ -230,8 +261,8 @@ function calcPlan(S,now,o){
     var cl=have+add;
     var fee=cl*S.sim.fee,kAvg=cl*S.sim.kessan/12,ks=kAvg;
     if(lump) ks=sum(cohorts,function(q){return (m-q.k+1)%12===0?q.n*S.sim.kessan:0});
-    var rev=fee+ks,fxm=fixedAt(m),sm=staffM(m),si=staffI(m),lp=(loan>0&&m<=nPay)?loanPay:0,vr=cl*(S.sim.varCost||0);
-    rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,capped:capped,fee:fee,ks:ks,rev:rev,revA:fee+kAvg,fx:fxm,vr:vr,staff:sm,init:si,
+    var rev=fee+ks,fxm=fixedAt(m),sm=staffM(m),si=staffI(m),lp=(loan>0&&m<=nPay)?loanPay:0,acq=m>1?add*acqC:0,vr=cl*vu+acq;   // 新規獲得費は開業時の顧問先にはかからない
+    rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,capped:capped,fee:fee,ks:ks,rev:rev,revA:fee+kAvg,fx:fxm,vr:vr,acq:acq,staff:sm,init:si,
       out:fxm+vr+sm+si+S.sim.living+lp,kokuho:0,ctax:S.sim.ctaxOn?rev*S.sim.ctaxRate/100:0,itax:0,
       ratio:(fee+kAvg)>0?sm/(fee+kAvg):0,hire:staffOn.filter(function(s){return s.start===m})});
   }
@@ -298,7 +329,7 @@ const SIM = {
   churn: N('年間の解約率（%）'),
   ownerCap: N('所長が担当できる件数。0で上限なし'),
   fee: N('顧問料の月額単価（円・税込）'),
-  varCost: N('変動費（顧問先1件あたり・月・円）。外注費・口座振替手数料・紹介手数料など'),
+  acqCost: N('新規1件あたりの獲得費（円）。紹介サイトの成果報酬など。開業時の顧問先にはかからない'),
   kessan: N('決算料（1件あたり年1回・円）'),
   kessanMode: { type: 'string', enum: ['lump', 'avg'], description: '決算料の入金。lump=契約12か月目に一括、avg=毎月に均す' },
   living: N('生活費（月・円）'),
@@ -333,10 +364,12 @@ const LISTS = {
   fixed_costs: { key: 'fixed', label: '月の固定費', fields: {
     group: ['g', S('区分（システム代・その他雑費 など）')], label: ['label', S('項目')], amount: ['amt', N('月額（円）')],
     note: ['note', S('メモ')], prepaid: ['pre', B('初年度分を開業費用で前払いしているか。trueなら開業1〜12か月目は支出に入れない')] } },
+  variable_costs: { key: 'vars', label: '変動費', fields: {
+    label: ['label', S('項目')], amount: ['amt', N('顧問先1件あたり・月の金額（円）')], note: ['note', S('メモ')] } },
   staff: { key: 'staff', label: '人員', fields: {
     label: ['label', S('役割')], planned: ['on', B('計画に入れる（採用する）か')], start: ['start', N('採用する月。開業月を1とする')],
     salary: ['salary', N('月給（額面・円）')], bonus_months: ['bonusMonths', N('賞与（年間の月数。例：2）')],
-    social_insurance_rate: ['shaho', N('社会保険の会社負担（%）。加入するなら約15、短時間のパートや外注は0')], tools: ['tools', N('ツール代（月・円）')], init: ['init', N('採用時の初期費用（円）')],
+    social_insurance_rate: ['shaho', N('社会保険の会社負担（%）。加入するなら約15、短時間のパートや外注は0')], tools: ['tools', N('ツール代（月・円）')], welfare: ['welfare', N('福利厚生（月・円）。健診の月割・退職金の掛金・在宅手当など')], init: ['init', N('採用時の初期費用（円）')],
     cap: ['cap', N('担当できる顧問先数（件）')], note: ['note', S('メモ')] } },
 };
 const props = spec => Object.fromEntries(Object.entries(spec).map(([k, v]) => [k, Array.isArray(v) ? v[1] : v]));
@@ -361,15 +394,15 @@ const TOOLS = [
     description: '計画の前提（開業までの積立、開業後の顧問先数・単価・生活費・税金・借入など）を書き換えて保存する。変更する項目だけを渡す。持ち主のスマホの画面にも反映される。持ち主が変更を頼んだときだけ使う。',
     inputSchema: { type: 'object', properties: { settings: SETTINGS_SCHEMA }, required: ['settings'], additionalProperties: false } },
   { name: 'upsert_item',
-    description: '節目・開業費用・月の固定費・人員の1行を追加または変更して保存する。id を渡すとその行を変更し、省くと新しい行を追加する。id は get_plan で分かる。開業予定月を変えるには、milestones の is_opening が true の行の ym を変える。',
+    description: '節目・開業費用・月の固定費・変動費・人員の1行を追加または変更して保存する。id を渡すとその行を変更し、省くと新しい行を追加する。id は get_plan で分かる。開業予定月を変えるには、milestones の is_opening が true の行の ym を変える。',
     inputSchema: { type: 'object', properties: {
-      list: { type: 'string', enum: Object.keys(LISTS), description: 'milestones=節目、open_costs=開業費用、fixed_costs=月の固定費、staff=人員' },
+      list: { type: 'string', enum: Object.keys(LISTS), description: 'milestones=節目、open_costs=開業費用、fixed_costs=月の固定費、variable_costs=変動費（顧問先1件あたり・月）、staff=人員' },
       id: S('変更する行の id。新規追加のときは省く'),
       fields: { type: 'object', description: '変更する項目だけを入れる。list ごとに使える項目： ' +
         Object.entries(LISTS).map(([k, v]) => k + '（' + Object.entries(v.fields).map(([f, x]) => f + '=' + x[1].description).join('、') + '）').join(' ／ ') } },
       required: ['list', 'fields'], additionalProperties: false } },
   { name: 'delete_item',
-    description: '節目・開業費用・月の固定費・人員の1行を削除して保存する。開業の節目は削除できない。持ち主が削除を頼んだときだけ使う。',
+    description: '節目・開業費用・月の固定費・変動費・人員の1行を削除して保存する。開業の節目は削除できない。持ち主が削除を頼んだときだけ使う。',
     inputSchema: { type: 'object', properties: {
       list: { type: 'string', enum: Object.keys(LISTS) }, id: S('削除する行の id') }, required: ['list', 'id'], additionalProperties: false } },
 ];
@@ -399,7 +432,7 @@ function results(C, plan) {
     effective_monthly_price: round(C.price),
     clients_needed_for_cash_to_grow_every_month: { owner_only: needClients(plan, { living: true }), with_planned_staff: needClients(plan, { staff: C.staffMAll, living: true }), note: '生活費・税金込み。2年目以降の固定費で計算' },
     clients_needed_for_business_in_black: { owner_only: needClients(plan, {}), with_planned_staff: needClients(plan, { staff: C.staffMAll }) },
-    annual_profit_and_loss_by_client_count: [5, 10, 15, 20, 25, 30, 40, 50].map(n => { const M = monthlyAt(plan, n, { staff: C.staffMAll }); return { clients: n, sales: round(M.salesY), variable_costs_incl_consumption_tax: round(M.varM * 12 + M.ctaxY), fixed_costs_incl_staff: round((M.fixed + M.staff) * 12), income_before_tax: round(M.preY), income_after_tax: round(M.afterY), cash_left_after_living: round(M.annual) }; }),
+    annual_profit_and_loss_by_client_count: [5, 10, 15, 20, 25, 30, 40, 50].map(n => { const M = monthlyAt(plan, n, { staff: C.staffMAll }); return { clients: n, sales: round(M.salesY), variable_costs_incl_acquisition_and_consumption_tax: round(M.y.varc + M.y.acq + M.y.ctax), fixed_costs_incl_staff: round((M.fixed + M.staff) * 12), income_before_tax: round(M.preY), income_after_tax: round(M.afterY), cash_left_after_living: round(M.annual) }; }),
     month_black_becomes_stable: C.stableM || null,
     first_month_in_black_incl_living_and_tax: C.firstBlack || null,
     first_month_business_in_black: C.firstBiz || null,
@@ -427,7 +460,7 @@ function planOut(plan) {
     as_of: nowJst(), unit: '円（税込）。△の代わりに負の数で表す', last_updated: new Date(plan.updatedAt || 0).toISOString(),
     settings: { pre: plan.pre, sim: Object.fromEntries(Object.keys(SIM).map(k => [k, plan.sim[k]])) },
     milestones: listOut(plan, 'milestones').sort((a, b) => a.ym < b.ym ? -1 : a.ym > b.ym ? 1 : 0),
-    open_costs: listOut(plan, 'open_costs'), fixed_costs: listOut(plan, 'fixed_costs'), staff: listOut(plan, 'staff'),
+    open_costs: listOut(plan, 'open_costs'), fixed_costs: listOut(plan, 'fixed_costs'), variable_costs: listOut(plan, 'variable_costs'), staff: listOut(plan, 'staff'),
     results: results(C, plan),
     notes: '税金は概算。納税は当年の各月に均している。初期値には仮置きの数字が含まれる（各行の note を参照）。',
   };
@@ -476,7 +509,7 @@ function applyItem(plan, a) {
   } else {
     if (!vals.label) throw new Error('新しい行には label が必要です');
     const base = { milestones: { ym: nowJst(), done: false, cost: 0, note: '', kind: '' }, open_costs: { g: 'その他', amt: 0, note: '' },
-      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, staff: { on: true, start: 13, salary: 0, bonusMonths: 0, shaho: 0, tools: 0, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
+      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, variable_costs: { amt: 0, note: '' }, staff: { on: true, start: 13, salary: 0, bonusMonths: 0, shaho: 0, tools: 0, welfare: 0, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
     row = Object.assign({ id: uid() }, base, vals);
     arr.push(row);
   }

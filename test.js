@@ -3,8 +3,8 @@
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/app.html', 'utf8');
 const block = src.slice(src.indexOf('/*CALC-START*/'), src.indexOf('/*CALC-END*/'));
-const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt, kokuhoAnnual, salaryIncome, staffCost, varUnit } =
-  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt,kokuhoAnnual,salaryIncome,staffCost,varUnit};')();
+const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt, kokuhoAnnual, salaryIncome, staffCost, varUnit, loanSplit, staffLabor, keepRate } =
+  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt,kokuhoAnnual,salaryIncome,staffCost,varUnit,loanSplit,staffLabor,keepRate};')();
 
 let pass = 0, fail = 0;
 function eq(name, got, want, tol = 0.5) {
@@ -45,12 +45,13 @@ eq('前払い分の年額', (C.fixedBase - C.fixed1) * 12, 659120, 6);  // 454,0
 // --- 開業前の積立 ---
 eq('開業月', C.open, '2031-04');
 eq('開業までの月数', C.preN, 53);
-eq('積立合計', C.accM, 53 * 50000);
+eq('積立合計', C.accM, 52 * 50000);                   // 開業の前月（2031年3月）まで。開業月は給与がない
+eq('積立する月数', C.saveN, 52);
 eq('賞与積立', C.accB, 900000);                      // 6月・12月が計9回 × 10万円
 eq('節目の支出', C.accC, 1600000);
-eq('開業時の見込み資金', C.projected, 2950000);
+eq('開業時の見込み資金', C.projected, 2900000);       // 100万 ＋ 260万 ＋ 90万 − 160万
 eq('必要な手元資金 1人', C.required, 1233900 + 6 * 385290);
-eq('過不足 1人', C.gap, 2950000 - 3545640);
+eq('過不足 1人', C.gap, 2900000 - 3545640);
 let C2 = calcPlan(base(), NOW, { staff: [{ start: 1, monthly: 412000, init: 211600, cap: 30 }] });
 eq('必要な手元資金 2人', C2.required, 1233900 + 211600 + 6 * 797290);
 
@@ -61,7 +62,7 @@ eq('1か月目の収入', C.rows[0].rev, 150000);
 eq('1か月目の支出', C.rows[0].out, 385290);
 eq('12か月目の支出', C.rows[11].out, 385290);
 eq('13か月目の支出（前払い終了）', C.rows[12].out, 440217);
-eq('開業直後の残高', C.b0, 2950000 - 1233900);
+eq('開業直後の残高', C.b0, 2900000 - 1233900);
 eq('残高の積み上げ', C.rows[35].bal, C.b0 + C.rows.reduce((t, r) => t + r.net, 0), 1);
 
 // --- 決算料 ---
@@ -89,15 +90,15 @@ eq('解約＋増加：2か月目', C.rows[1].clients, 5 * keep + 1, 1e-9);
 
 // --- 人員 ---
 C = calcPlan(base(S => { vet(S).on = true; vet(S).start = 1; }), NOW);
-eq('2人版 1か月目の支出', C.rows[0].out, 385290 + 412000 + 211600);
+eq('2人版 1か月目の支出', C.rows[0].out, 385290 + 412000 + 180000);
 eq('2人版 2か月目の支出', C.rows[1].out, 385290 + 412000);
-eq('2人版 36か月目の分配率', C.rows[35].ratio, 412000 / 1200000, 1e-9);
+eq('2人版 36か月目の分配率', C.rows[35].ratio, (412000 - 9500) / 1200000, 1e-9);   // 人件費（ツール代を除く）÷ 限界利益
 
 // --- 借入 ---
 C = calcPlan(base(S => { S.sim.loan = 3000000; S.sim.loanYears = 7; S.sim.loanRate = 2.5; }), NOW);
 const r = 2.5 / 1200;
 eq('元利均等の現在価値', C.loanPay * (1 - Math.pow(1 + r, -84)) / r, 3000000, 1);
-eq('借入後の開業直後残高', C.b0, 2950000 + 3000000 - 1233900);
+eq('借入後の開業直後残高', C.b0, 2900000 + 3000000 - 1233900);
 
 // --- 税金 ---
 eq('所得税 195万円', incomeTax(1950000), (1950000 * 0.10 - 97500) * 1.021);
@@ -119,13 +120,13 @@ eq('税金の合計', C.ctaxT + C.itaxT, C.rows.reduce((t, x) => t + x.tax, 0), 
 const S0 = base();
 const D = calcPlan(S0, NOW, { slip: { from: S0.ms[0].ym, months: 12 } });
 eq('1年遅れの開業月', D.open, '2032-04');
-eq('1年遅れの見込み資金', D.projected, 2950000 + 12 * 50000 + 200000);
+eq('1年遅れの見込み資金', D.projected, 2900000 + 12 * 50000 + 200000);
 const D2 = calcPlan(S0, NOW, { slip: { from: '2030-11', months: 12 } });
 eq('登録申請から遅れる：開業月', D2.open, '2032-04');
 eq('登録申請から遅れる：学費は変わらない', D2.accC, 1600000);
 const D3 = calcPlan(S0, NOW, { slip: { from: NOW, months: 24, cost: 600000 } });
 eq('2年遅れ・追加支出あり：開業月', D3.open, '2033-04');
-eq('2年遅れ・追加支出あり：見込み資金', D3.projected, 2950000 + 24 * 50000 + 400000 - 600000);
+eq('2年遅れ・追加支出あり：見込み資金', D3.projected, 2900000 + 24 * 50000 + 400000 - 600000);
 
 // --- 黒字が続くのに必要な顧問先数 ---
 let Sn = base();                                       // 税金なし：資料の損益分岐と同じになる
@@ -216,7 +217,7 @@ eq('整合：所得税等', Y2.tax, Mx.y.tax, 1);
 eq('整合：手残り＝年間の収支', tot('net'), Mx.y.left, 1);
 eq('整合：運転資金の月額＝資金繰り表1か月目の支出', C.month1, C.rows[0].out - C.rows[0].init, 1e-6);
 eq('整合：運転資金に変動費と返済が入る', C.month1, 85290 + 30000 + 412000 + 300000 + 40000 + C.loanPay, 1e-6);
-eq('整合：必要な手元資金', C.required, 211600 + 6 * C.month1, 1e-6);
+eq('整合：必要な手元資金', C.required, 180000 + 6 * C.month1, 1e-6);
 // 見積タブの損益分岐：税金・変動費なしなら引き継ぎ資料と一致、ありなら結果タブと一致
 [[20000, 8, 23], [30000, 5, 15], [40000, 4, 12], [50000, 3, 9]].forEach(([p, a, b]) => {
   eq(`損益分岐 税なし ${p} 税引前`, needClients(base(), { price: p }), a);
@@ -307,6 +308,66 @@ eq('移行v2：仮置きの固定費を足す', M2v.fixed.filter(x => String(x.i
 eq('移行v2：以前の変動費は一覧に移す', varUnit(M2v), 850 + 300);
 eq('移行v2：ベテランに福利厚生', vet(M2v).monthly, 421000);
 eq('移行v2：2回かけても増えない', migrate(JSON.parse(JSON.stringify(M2v))).fixed.length, M2v.fixed.length);
+
+// --- 借入：元金と利息 ---
+const Sl = base(S => { Object.assign(S.sim, { loan: 3000000, loanYears: 7, loanRate: 2.5, itaxOn: true }); });
+let prin = 0, intr = 0; for (let m = 1; m <= 84; m++) { const L = loanSplit(Sl, m); prin += L.principal; intr += L.interest; }
+eq('元金の合計＝借入額', prin, 3000000, 1);
+eq('1か月目の利息＝借入額×月利', loanSplit(Sl, 1).interest, 3000000 * 0.025 / 12, 1e-6);
+eq('返済が終わった月は0', loanSplit(Sl, 85).pay, 0);
+C = calcPlan(Sl, NOW);
+eq('利息は税引前所得から引く', C.years[0].profit, C.years[0].rows.reduce((t, r) => t + r.rev - r.fx - r.interest, 0) - 1233900, 1e-6);
+eq('返済額は元金と利息の合計のまま支出に入る', C.rows[0].out, 385290 + C.loanPay, 1e-6);
+Mx = monthlyAt(Sl, 20, {});
+let i2 = 0, p2 = 0; for (let m = 13; m <= 24; m++) { i2 += loanSplit(Sl, m).interest; p2 += loanSplit(Sl, m).principal; }
+eq('損益表の支払利息は2年目の額', Mx.y.interest, i2, 1e-6);
+eq('損益表の返済は元金だけ', Mx.y.loan, p2, 1e-6);
+eq('利息＋元金＝年間の返済額', Mx.y.interest + Mx.y.loan, C.loanPay * 12, 1e-6);
+eq('返済が1年で終わる借入は、2年目の損益に残らない', monthlyAt(base(S => { Object.assign(S.sim, { loan: 1000000, loanYears: 1, loanRate: 2 }); }), 20, {}).y.loan, 0);
+
+// --- 労働分配率＝人件費（ツール代を除く）÷ 限界利益 ---
+eq('人件費はツール代を除く', staffLabor({ salary: 300000, bonusMonths: 2, shaho: 15, tools: 9500, welfare: 9000 }), 411500);
+C = calcPlan(base(S => { vet(S).on = true; vet(S).start = 1; S.sim.ctaxOn = true; S.vars = [{ id: 'a', label: 'x', amt: 1000, note: '' }]; S.sim.clients = 40; S.sim.growth = 0; }), NOW);
+eq('分配率の分母は限界利益', C.rows[5].ratio, 402500 / (40 * 30000 * 0.955 - 40 * 1000), 1e-9);
+
+// --- 解約があるとき、決算料（契約12か月目ごと）の年間額が資金繰り表と損益表で一致する ---
+const Sz = base(S => { S.ms.find(m => m.kind === 'open').ym = '2031-01'; S.openCosts = [];
+  Object.assign(S.sim, { clients: 25, churn: 10, kessan: 150000, months: 120, ctaxOn: true, itaxOn: true, kokuho: 30000 }); S.sim.growth = 25 * (1 - keepRate(S)); });
+C = calcPlan(Sz, NOW); Mx = monthlyAt(Sz, 25, {});
+const Y9 = C.years[8];                                 // 十分に時間がたった年
+// 開業時の25件は全員が同じ月に決算料を払うかたまりとして残るので、完全には一致しない。3%以内に収まることを確かめる
+eq('整合：決算料（解約あり）', Y9.rows.reduce((t, r) => t + r.ks, 0), Mx.y.kessan, Mx.y.kessan * 0.03);
+eq('解約があると決算料は全件分より少ない', Mx.y.kessan < 25 * 150000 && Mx.y.kessan > 25 * 150000 * 0.9, true);
+eq('月に均す設定なら全件分', monthlyAt(base(S => { Object.assign(S.sim, { churn: 10, kessan: 150000, kessanMode: 'avg' }); }), 25, {}).y.kessan, 3750000);
+eq('解約なしなら決算料は全件分', monthlyAt(base(S => { S.sim.kessan = 150000; }), 20, {}).y.kessan, 3000000);
+
+// --- 条件をいろいろ変えても崩れない関係 ---
+let sd = 7; const rnd = () => (sd = (sd * 1103515245 + 12345) % 2147483648) / 2147483648, pick = a => a[Math.floor(rnd() * a.length)];
+let bad = 0;
+for (let k = 0; k < 150; k++) {
+  const S = defaults(); S.ms.find(m => m.kind === 'open').ym = pick(['2031-01', '2031-03', '2031-04', '2031-12']);
+  Object.assign(S.sim, { clients: pick([0, 5, 30]), growth: pick([0, 1, 3]), churn: pick([0, 5, 30]), ownerCap: pick([0, 30]), kessan: pick([0, 150000]), kessanMode: pick(['lump', 'avg']), months: pick([12, 36, 60]),
+    loan: pick([0, 3000000]), loanYears: pick([1, 2, 7]), ctaxOn: rnd() < .7, itaxOn: rnd() < .7, kokuhoAuto: rnd() < .7, acqCost: pick([0, 50000]) });
+  S.staff.forEach(x => { x.on = rnd() < .4; x.start = pick([1, 13]); });
+  const P = calcPlan(S, NOW), R = P.rows;
+  if (Math.abs(R[P.N - 1].bal - (P.b0 + R.reduce((t, r) => t + r.net, 0))) > 1) bad++;                              // 残高＝開業直後＋収支の合計
+  if (R.some(r => ![r.rev, r.out, r.tax, r.bal, r.kokuho, r.ratio].every(isFinite) || r.tax < -1e-6)) bad++;       // 数字が壊れない
+  if (Math.abs(P.required - (P.openCost + P.staffInit1 + S.sim.buffer * (R[0].out - R[0].init))) > 1) bad++;        // 必要資金の定義
+  for (const n of [1, 20, 60]) { const M = monthlyAt(S, n, { staff: P.staffMAll });
+    for (const v of [M.m, M.y]) { if (Math.abs(v.sales - v.varc - v.acq - v.ctax - v.fix - v.staff - v.interest - v.pre) > 1e-3) bad++;
+      if (Math.abs(v.pre - v.tax - v.living - v.kokuho - v.loan - v.left) > 1e-3) bad++; }
+    for (const key of Object.keys(M.y)) if (Math.abs(M.m[key] * 12 - M.y[key]) > 1e-2) bad++; }
+  const nd = needClients(S, { staff: P.staffMAll, living: true });
+  if (nd && monthlyAt(S, nd, { staff: P.staffMAll }).y.left < 0) bad++;                                             // 必要件数では黒字
+  if (P.stableM && R.slice(P.stableM - 1).some(r => r.red)) bad++;                                                 // 黒字開始後に赤字がない
+}
+eq('150通りの条件で関係が崩れない', bad, 0);
+
+// --- 第3版への移行（ベテランの初期費用の二重計上を外す） ---
+const v2 = defaults(); v2.v = 2; vet(v2).init = 211600;
+eq('移行v3：初期費用からClaude Pro年払いを外す', vet(migrate(JSON.parse(JSON.stringify(v2)))).init, 180000);
+const v2b = defaults(); v2b.v = 2; vet(v2b).init = 250000;
+eq('移行v3：自分で直した初期費用は変えない', vet(migrate(JSON.parse(JSON.stringify(v2b)))).init, 250000);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

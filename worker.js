@@ -46,7 +46,7 @@ function defaults(){
   var oc=function(g,label,amt,note){return {id:uid(),g:g,label:label,amt:amt,note:note||''}};
   var fx=function(g,label,amt,note){return {id:uid(),g:g,label:label,amt:amt,note:note||'',pre:/達人|弥生|税務通信|Google Workspace|セキュリティ|本会会費|支部会費|税賠/.test(label)}};
   var ms=function(label,ym,cost,note,kind){return {id:uid(),label:label,ym:ym,done:false,cost:cost||0,note:note||'',kind:kind||''}};
-  return {v:2,updatedAt:0,
+  return {v:3,updatedAt:0,
     pre:{savings:1000000,monthly:50000,bonus:200000},
     ms:[
       ms('簿記論 合格','2027-12',0,'合格発表の月を入れる'),
@@ -99,7 +99,7 @@ function defaults(){
     vars:PROV_VARS.map(copyRow),
     staff:[
       {id:uid(),label:'パート（記帳＋総務兼務）',on:false,start:7,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:10,note:'月給・担当件数は仮置き。短時間勤務で社会保険なしの想定'},
-      {id:uid(),label:'ベテラン社員',on:false,start:13,salary:300000,bonusMonths:2,shaho:15,tools:9500,welfare:9000,monthly:421000,init:211600,cap:30,note:'初期費用はPC等18万＋Claude Pro年払い。福利厚生は仮置き（健診・退職金掛金・在宅手当）'},
+      {id:uid(),label:'ベテラン社員',on:false,start:13,salary:300000,bonusMonths:2,shaho:15,tools:9500,welfare:9000,monthly:421000,init:180000,cap:30,note:'初期費用はPC等18万円。Claude Pro は月額のツール代に入れているので、年払いの3.16万円は初期費用に足さない。福利厚生は仮置き（健診・退職金掛金・在宅手当）'},
       {id:uid(),label:'パート（総務専任）',on:false,start:25,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:0,note:'月給は仮置き。短時間勤務で社会保険なしの想定'},
       {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,salary:50000,bonusMonths:0,shaho:0,tools:0,monthly:50000,init:0,cap:0,note:'報酬は仮置き。調査立会いはOB本人の税理士登録が前提'}
     ],
@@ -124,6 +124,8 @@ function migrate(s){
     }
     s.staff.forEach(function(x){if(typeof x.welfare!=='number'&&/ベテラン/.test(x.label))x.welfare=9000});
   }
+  // 第3版への移行：ベテラン社員の初期費用から Claude Pro 年払い（31,600円）を外す。月額のツール代にも入っていて初年度に二重になるため
+  if((s.v||1)<3) s.staff.forEach(function(x){if(/ベテラン/.test(x.label)&&x.init===211600)x.init=180000});
   if(!Array.isArray(s.vars)) s.vars=[];
   // 月給・賞与月数から総コストを出す形への移行。以前の月額コストが変わらないように内訳を入れる
   s.staff.forEach(function(x){
@@ -135,7 +137,7 @@ function migrate(s){
     }
     x.monthly=staffCost(x);
   });
-  s.updatedAt=s.updatedAt||0; s.v=2; return s;
+  s.updatedAt=s.updatedAt||0; s.v=3; return s;
 }
 /* ---------- 計算（画面に依存しない。test.js がこの範囲を取り出して検算する） ---------- */
 var sum=function(a,f){return a.reduce(function(t,x){return t+(f(x)||0)},0)};
@@ -178,13 +180,22 @@ function kokuhoAnnual(S,income){
   var base=Math.max(0,income-430000),n=Math.max(1,Math.round(S.sim.khMembers||1));
   return sum(KOKUHO,function(q){return (q.age40&&!S.sim.khAge40)?0:Math.min(q.cap,base*q.rate+q.per*n+q.house)});
 }
+/* 元利均等返済の m か月目の内訳（開業月を1か月目とする）。返済が終わった月は 0 */
+function loanSplit(S,m){
+  var loan=Math.max(0,S.sim.loan),n=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200,pay=loanPayment(S);
+  if(!(loan>0)||m<1||m>n) return {pay:0,interest:0,principal:0};
+  var g=Math.pow(1+r,m-1),bal=r>0?loan*g-pay*(g-1)/r:loan-pay*(m-1);      // その月の返済前の残高
+  return {pay:pay,interest:bal*r,principal:pay-bal*r};
+}
+/* 人件費（労働分配率の計算用）＝総コストからツール代を除いたもの */
+function staffLabor(s){return typeof s.salary==='number'?staffCost(s)-(s.tools||0):(s.labor!=null?s.labor:s.monthly||0)}
 /* 所得税＋住民税＋個人事業税の概算。inc=青色申告特別控除前の事業の利益、mon=その年に事業をした月数、kokuhoY=その年に払う国保・年金（社会保険料控除） */
 function annualTax(S,inc,mon,kokuhoY){
   if(!S.sim.itaxOn||inc<=0) return 0;
   var taxable=inc-650000-S.sim.deduct-(kokuhoY||0);
   return incomeTax(taxable)+Math.max(0,taxable+150000)*0.10+Math.max(0,inc-2900000*mon/12)*0.05;
 }
-/* 顧問先が n 件で安定したときの損益（2年目以降の固定費）。o.staff: 人件費の月額。金額はすべて円
+/* 顧問先が n 件で安定したときの損益（開業2年目の固定費・借入返済で計算）。o.staff: 人件費の月額。金額はすべて円
    m＝月間、y＝年間。月間は年間の12分の1（決算料は顧問先ごとに決算月が違う前提で月平均にする）
    biz・left は、決算料を当てにせず顧問料だけで見た月の数字（控えめな見方に使う）
    変動費＝1件あたりの変動費＋解約分を補充する新規獲得費＋消費税の納税額（税込経理なので租税公課として費用に入る） */
@@ -192,18 +203,22 @@ function monthlyAt(S,n,o){
   o=o||{};
   var fixed=sum(S.fixed,function(x){return x.amt}),staff=o.staff||0,c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
   var unit=o.price!=null?o.price:S.sim.fee,kes=o.price!=null?0:S.sim.kessan;   // o.price: 決算料込みの実効単価で計算する
-  var fee=n*unit,kessanY=n*kes,salesY=fee*12+kessanY,varM=n*varUnit(S);
-  var acqM=n*(1-keepRate(S))*Math.max(0,S.sim.acqCost||0);         // 解約で減る分を補充するための新規獲得費
-  var biz=fee*(1-c)-varM-acqM-fixed-staff;                         // 税引前所得（月・決算料を除く）
+  // 決算料が契約12か月目ごとの入金のとき、途中で解約した顧問先からは入らない。その割合を掛けて資金繰り表と合わせる
+  var kp=keepRate(S),q=Math.pow(kp,12),kf=(S.sim.kessanMode!=='avg'&&o.price==null&&q<1)?12*(1-kp)*Math.pow(kp,11)/(1-q):1;   // 毎月の新規のうち、12・24…か月目まで残る割合の合計
+  var fee=n*unit,kessanY=n*kes*kf,salesY=fee*12+kessanY,varM=n*varUnit(S);
+  var acqM=n*(1-kp)*Math.max(0,S.sim.acqCost||0);                  // 解約で減る分を補充するための新規獲得費
+  // 借入は開業2年目（13〜24か月目）の返済で見る。利息は経費、元金は税引後の所得から払う
+  var intY=0,prinY=0;for(var lm=13;lm<=24;lm++){var L=loanSplit(S,lm);intY+=L.interest;prinY+=L.principal}
+  var biz=fee*(1-c)-varM-acqM-fixed-staff-intY/12;                 // 税引前所得（月・決算料を除く）
   var preY=biz*12+kessanY*(1-c);                                   // 税引前所得（年）
   // 国保・年金：自動なら、この所得が続いたときの国保料（札幌市）＋国民年金。手入力ならその金額
   var kk=S.sim.kokuhoAuto?kokuhoAnnual(S,Math.max(0,preY-650000))/12+(S.sim.nenkin||0):S.sim.kokuho;
-  var taxY=annualTax(S,preY,12,kk*12),loanM=loanPayment(S);
+  var taxY=annualTax(S,preY,12,kk*12),loanM=prinY/12;
   var left=biz-taxY/12-S.sim.living-kk-loanM;
   var k=kessanY/12;                                                // 月間は決算料を月平均で入れる（月間×12＝年間）
-  var y={sales:salesY,kessan:kessanY,varc:varM*12,acq:acqM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
+  var y={sales:salesY,kessan:kessanY,varc:varM*12,acq:acqM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,interest:intY,pre:preY,tax:taxY,after:preY-taxY,
     living:S.sim.living*12,kokuho:kk*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
-  var mm={sales:fee+k,kessan:k,varc:varM,acq:acqM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
+  var mm={sales:fee+k,kessan:k,varc:varM,acq:acqM,ctax:(fee+k)*c,fix:fixed,staff:staff,interest:intY/12,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
     living:S.sim.living,kokuho:kk,loan:loanM,left:left+k*(1-c)};
   return {m:mm,y:y,n:n,fee:fee,kessanY:kessanY,salesY:salesY,varM:varM,ctax:fee*c,ctaxY:salesY*c,fixed:fixed,staff:staff,
     biz:biz,preY:preY,bizAnnual:preY,tax:taxY/12,taxY:taxY,afterM:biz-taxY/12,afterY:preY-taxY,
@@ -225,14 +240,16 @@ function calcPlan(S,now,o){
   o=o||{};
   var ms=S.ms.map(function(m){return (o.slip&&!m.done&&ymN(m.ym)>=ymN(o.slip.from))?Object.assign({},m,{ym:ymAdd(m.ym,o.slip.months)}):m});
   var open=ms.filter(function(m){return m.kind==='open'})[0].ym,preN=Math.max(0,ymDiff(now,open));
-  var bal=S.pre.savings,accM=0,accB=0,accC=0,pre=[];
+  var bal=S.pre.savings,accM=0,accB=0,accC=0,saveN=0,pre=[];
   var costAt=function(test){return sum(ms,function(m){return (!m.done&&m.kind!=='open'&&m.cost>0&&test(m.ym))?m.cost:0})};
   var c0=costAt(function(ym){return ymN(ym)<=ymN(now)}); bal-=c0; accC+=c0;
   pre.push({ym:now,bal:bal});
   for(var i=1;i<=preN;i++){
     var ym=ymAdd(now,i),mo=+ym.slice(5,7);
-    bal+=S.pre.monthly; accM+=S.pre.monthly;
-    if(mo===6||mo===12){bal+=S.pre.bonus/2;accB+=S.pre.bonus/2}
+    if(i<preN){                                  // 積立は開業の前月まで。開業月は給与がないので積み立てない
+      bal+=S.pre.monthly; accM+=S.pre.monthly; saveN++;
+      if(mo===6||mo===12){bal+=S.pre.bonus/2;accB+=S.pre.bonus/2}
+    }
     var c=costAt(function(y){return y===ym}); bal-=c; accC+=c;
     pre.push({ym:ym,bal:bal});
   }
@@ -244,6 +261,7 @@ function calcPlan(S,now,o){
   var loan=Math.max(0,S.sim.loan),nPay=Math.max(1,Math.round(S.sim.loanYears*12)),loanPay=loanPayment(S);
   var staffOn=o.staff||S.staff.filter(function(s){return s.on});
   var staffM=function(m){return sum(staffOn,function(s){return s.start<=m?s.monthly:0})};
+  var laborM=function(m){return sum(staffOn,function(s){return s.start<=m?staffLabor(s):0})};
   var staffI=function(m){return sum(staffOn,function(s){return s.start===m?s.init:0})};
   var capAt=function(m){return S.sim.ownerCap>0?S.sim.ownerCap+sum(staffOn,function(s){return s.start<=m?(s.cap||0):0}):Infinity};
   var keep=keepRate(S),vu=varUnit(S),acqC=Math.max(0,S.sim.acqCost||0);
@@ -261,15 +279,16 @@ function calcPlan(S,now,o){
     var cl=have+add;
     var fee=cl*S.sim.fee,kAvg=cl*S.sim.kessan/12,ks=kAvg;
     if(lump) ks=sum(cohorts,function(q){return (m-q.k+1)%12===0?q.n*S.sim.kessan:0});
-    var rev=fee+ks,fxm=fixedAt(m),sm=staffM(m),si=staffI(m),lp=(loan>0&&m<=nPay)?loanPay:0,acq=m>1?add*acqC:0,vr=cl*vu+acq;   // 新規獲得費は開業時の顧問先にはかからない
-    rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,capped:capped,fee:fee,ks:ks,rev:rev,revA:fee+kAvg,fx:fxm,vr:vr,acq:acq,staff:sm,init:si,
+    var rev=fee+ks,fxm=fixedAt(m),sm=staffM(m),si=staffI(m),ls=loanSplit(S,m),lp=ls.pay,acq=m>1?add*acqC:0,vr=cl*vu+acq;   // 新規獲得費は開業時の顧問先にはかからない
+    rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,capped:capped,fee:fee,ks:ks,rev:rev,revA:fee+kAvg,fx:fxm,vr:vr,acq:acq,staff:sm,init:si,interest:ls.interest,
       out:fxm+vr+sm+si+S.sim.living+lp,kokuho:0,ctax:S.sim.ctaxOn?rev*S.sim.ctaxRate/100:0,itax:0,
-      ratio:(fee+kAvg)>0?sm/(fee+kAvg):0,hire:staffOn.filter(function(s){return s.start===m})});
+      labor:laborM(m),marg:(fee+kAvg)*(1-(S.sim.ctaxOn?S.sim.ctaxRate/100:0))-vr,ratio:0,hire:staffOn.filter(function(s){return s.start===m})});
   }
+  rows.forEach(function(r){r.ratio=r.marg>0?r.labor/r.marg:0});   // 労働分配率＝人件費 ÷ 限界利益（売上−変動費−消費税。決算料は月割）
   // 2) 所得税・住民税・個人事業税（暦年ごとの概算を、その年の月に均して積み立てる）
   var years=[],ymap={};
   rows.forEach(function(r){var y=r.ym.slice(0,4);if(!ymap[y]){ymap[y]={y:y,n:0,rev:0,profit:0,ctax:0,tax:0,rows:[]};years.push(ymap[y])}
-    var Y=ymap[y];Y.n++;Y.rev+=r.rev;Y.ctax+=r.ctax;Y.profit+=r.rev-r.fx-r.vr-r.staff-r.init-r.ctax;Y.rows.push(r)});
+    var Y=ymap[y];Y.n++;Y.rev+=r.rev;Y.ctax+=r.ctax;Y.profit+=r.rev-r.fx-r.vr-r.staff-r.init-r.ctax-r.interest;Y.rows.push(r)});
   if(years.length) years[0].profit-=openCost;
   // 2-a) 国保・年金。国保は4月〜翌3月の年度ごとに、前年の所得で決まる。開業前と開業年は退職前の給与も所得に入る
   var openY=+open.slice(0,4),openMo=+open.slice(5,7);
@@ -300,13 +319,13 @@ function calcPlan(S,now,o){
     var basis=r.revA;                           // 決算料は月割にならして判定する
     r.red=basis-(r.out-r.init)-r.tax<0;          // 決算料を月割にならし、採用時の初期費用を除いて赤字か
     if(r.red) lastRed=r.m; else if(!firstBlack) firstBlack=r.m;
-    if(!firstBiz&&basis-r.fx-r.vr-r.staff-r.ctax>=0) firstBiz=r.m;
+    if(!firstBiz&&basis-r.fx-r.vr-r.staff-r.ctax-r.interest>=0) firstBiz=r.m;
   });
   var fixed1=fixedAt(1),month1=rows[0].out-rows[0].init;      // 固定費＋変動費＋人件費＋生活費＋国保年金＋返済
   var required=openCost+staffI(1)+month1*S.sim.buffer;
-  return {now:now,open:open,preN:preN,pre:pre,accM:accM,accB:accB,accC:accC,projected:projected,funds:funds,openCost:openCost,
+  return {now:now,open:open,preN:preN,saveN:saveN,pre:pre,accM:accM,accB:accB,accC:accC,projected:projected,funds:funds,openCost:openCost,
     fixedBase:fixedBase,fixed1:fixed1,loan:loan,loanPay:loanPay,price:price,rows:rows,years:years,ctaxT:ctaxT,itaxT:itaxT,b0:b0,minBal:minBal,minM:minM,firstBlack:firstBlack,firstBiz:firstBiz,stableM:lastRed<N?lastRed+1:0,
-    capM:capM,capEnd:capAt(N),month1:month1,kokuho1:rows[0].kokuho,var1:rows[0].vr,loan1:(loan>0?loanPay:0),staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
+    capM:capM,capEnd:capAt(N),month1:month1,kokuho1:rows[0].kokuho,var1:rows[0].vr,loan1:(loan>0?loanPay:0),staffInit1:staffI(1),staffM1:staffM(1),laborAll:sum(staffOn,staffLabor),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
 }
 
 

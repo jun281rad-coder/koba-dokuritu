@@ -69,7 +69,7 @@ label.f span.h{font-size:11px;line-height:1.35}
 .inp{display:flex;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:4px;min-width:0}
 .inp:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .inp input,.inp select,.inp textarea{flex:1;min-width:0;width:100%;border:0;background:transparent;color:var(--ink);font:500 16px var(--num);padding:9px 8px;text-align:right;outline:0}
-.inp input[type=text].t,.inp input[type=month],.inp select,.inp textarea{font-family:var(--text);text-align:left}
+.inp input[type=text].t,.inp input[type=url],.inp input[type=month],.inp select,.inp textarea{font-family:var(--text);text-align:left}
 .inp i{font-style:normal;font-size:12px;color:var(--muted);padding-right:8px;white-space:nowrap}
 label.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink)}
 label.chk input{width:20px;height:20px;accent-color:var(--accent)}
@@ -336,7 +336,42 @@ var state;
 try{state=migrate(JSON.parse(localStorage.getItem(KEY)))}catch(e){state=defaults()}
 function save(){
   state.updatedAt=Date.now();
-  try{localStorage.setItem(KEY,JSON.stringify(state));$('#sync').textContent='このブラウザに保存'}catch(e){$('#sync').textContent='保存できません（書き出しで控えを）'}
+  try{localStorage.setItem(KEY,JSON.stringify(state));syncMsg(syncUrl?'同期待ち…':'このブラウザに保存')}catch(e){syncMsg('保存できません（書き出しで控えを）')}
+  if(syncUrl){clearTimeout(pushT);pushT=setTimeout(push,1500)}
+}
+
+/* ---------- Claude連携（Cloudflare Workers 上のサーバーと計画を同期する） ---------- */
+var SYNC_KEY='dokuritsu-sync-url',BASE_KEY='dokuritsu-sync-base',syncUrl='',syncBase=0,pushT=null;
+try{syncUrl=localStorage.getItem(SYNC_KEY)||'';syncBase=+localStorage.getItem(BASE_KEY)||0}catch(e){}
+function setBase(v){syncBase=v;try{localStorage.setItem(BASE_KEY,String(v))}catch(e){}}
+function syncMsg(t){$('#sync').textContent=t;var el=$('#syncstate');if(el)el.textContent=t}
+function adopt(plan){
+  state=migrate(plan);
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+  setBase(state.updatedAt);
+  if(!sheetCtx)render();
+}
+var syncFail=function(){syncMsg('同期できません（この端末には保存済み）')};
+function pull(){
+  if(!syncUrl)return Promise.resolve();
+  syncMsg('同期中…');
+  return fetch(syncUrl+'/api/plan',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()}).then(function(d){
+    var sv=d.plan,st=sv?(sv.updatedAt||0):0;
+    if(sv&&st>state.updatedAt){adopt(sv);syncMsg('サーバーと同期済み（サーバーの内容を読み込み）')}
+    else if(!sv||state.updatedAt>st){
+      if(!state.updatedAt){state.updatedAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+      setBase(st);return push();
+    }
+    else{setBase(st);syncMsg('サーバーと同期済み')}
+  }).catch(syncFail);
+}
+function push(){
+  if(!syncUrl)return Promise.resolve();
+  return fetch(syncUrl+'/api/plan',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({plan:state,base:syncBase})}).then(function(r){
+    if(r.status===409)return r.json().then(function(d){adopt(d.plan);syncMsg('サーバー側の変更を読み込みました（直前の入力は反映されていません）')});
+    if(!r.ok)throw new Error(r.status);
+    setBase(state.updatedAt);syncMsg('サーバーと同期済み');
+  }).catch(syncFail);
 }
 function calc(o){return calcPlan(state,nowYm(),o)}
 function openMs(){return state.ms.filter(function(m){return m.kind==='open'})[0]}
@@ -371,6 +406,10 @@ roadmap:function(){
   '<section><h2>開業が遅れた場合<small>試験の不合格など</small></h2><div class="form">'+
     inp('sim.slipCost','遅れる1年あたりの追加支出',{full:1,h:'予備校代・受験料・学費の延長など。0なら追加支出なし'})+
     '</div><div class="scroll"><table data-out="slip"></table></div><p class="note">未完了の節目をすべて同じ期間だけ後ろにずらします。遅れる間も今の積立が続く前提なので、追加支出が積立より少なければ、開業時の資金は増えます。</p></section>'+
+  '<section><h2>Claude連携<small>MCP</small></h2><p class="note">Cloudflare Workers に置いたサーバーと計画を同期すると、Claude が計画を読み書きできます。手順はリポジトリの README にあります。連携URLは合言葉を含むので、他人に見せないでください。</p>'+
+    '<label class="f" for="syncurl">連携URL<span class="inp"><input id="syncurl" type="url" placeholder="https://….workers.dev/合言葉" value="'+esc(syncUrl)+'" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>'+
+    '<div class="btns"><button class="pri" data-act="sync-save">保存して同期</button><button data-act="token">合言葉を作る</button>'+(syncUrl?'<button data-act="copy-mcp">Claudeに登録するURLをコピー</button><button class="danger" data-act="sync-off">連携を解除</button>':'')+'</div>'+
+    '<p class="note" id="syncstate">'+(syncUrl?'連携中':'連携していません。入力はこのブラウザの中にだけ保存されます。')+'</p></section>'+
   '<section><h2>データ</h2><p class="note">貯蓄・積立・学費・パート月額などの初期値は例または仮置きです。ご自身の数字に置き換えてください。入力はこのブラウザの中にだけ保存されます。履歴の消去や機種変更に備えて、ときどきファイルに書き出してください。</p><div class="btns"><button data-act="export">計画をファイルに書き出す</button><button data-act="import">ファイルから読み込む</button><input type="file" id="imp" accept=".json,application/json" hidden><button data-act="copy">計画を引き継ぎテキストとしてコピー</button><button class="danger" data-act="reset">初期値に戻す</button></div></section>';
 },
 funds:function(){
@@ -724,6 +763,20 @@ document.addEventListener('click',function(ev){
       t.textContent='書き出しました';setTimeout(function(){if(t.isConnected)t.textContent='計画をファイルに書き出す'},2000)}catch(e){t.textContent='書き出せませんでした'}
   }
   else if(a==='import')$('#imp').click();
+  else if(a==='sync-save'){
+    var u=$('#syncurl').value.trim().replace(/\/+$/,'').replace(/\/(mcp|api\/plan)$/,'');
+    if(!/^https:\/\/[^\/]+\/[^\/]{20,}$/.test(u)&&!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/[^\/]{20,}$/.test(u)){$('#syncstate').textContent='URLの形が違います。https://（ワーカーのアドレス）/（20文字以上の合言葉） の形で入れてください。';return}
+    syncUrl=u;setBase(0);try{localStorage.setItem(SYNC_KEY,u)}catch(e){}
+    render();pull();
+  }
+  else if(a==='sync-off'){syncUrl='';setBase(0);try{localStorage.removeItem(SYNC_KEY);localStorage.removeItem(BASE_KEY)}catch(e){}render();syncMsg('このブラウザに保存')}
+  else if(a==='token'||a==='copy-mcp'){
+    var val,ttl;
+    if(a==='token'){var cs='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789',rv=new Uint8Array(40);crypto.getRandomValues(rv);val=Array.prototype.map.call(rv,function(x){return cs[x%cs.length]}).join('');ttl='合言葉（Cloudflare の TOKEN に設定）'}
+    else{val=syncUrl+'/mcp';ttl='Claude のコネクタに登録するURL'}
+    var show=function(){openSheet({title:ttl,msg:'長押しでコピーできます。他人に見せないでください。',value:{txt:val},fields:[{k:'txt',l:'',t:'area'}]});var ta=$('#f_txt');ta.focus();ta.select()};
+    if(a==='token')show();else{try{navigator.clipboard.writeText(val).then(function(){t.textContent='コピーしました';setTimeout(function(){if(t.isConnected)t.textContent='Claudeに登録するURLをコピー'},2000)},show)}catch(e){show()}}
+  }
   else if(a==='copy'){
     var txt=handover(),done=function(){t.textContent='コピーしました';setTimeout(function(){t.textContent='計画を引き継ぎテキストとしてコピー'},2000)};
     var fb=function(){openSheet({title:'引き継ぎテキスト（長押しでコピー）',value:{txt:txt},fields:[{k:'txt',l:'',t:'area'}]});var ta=$('#f_txt');ta.focus();ta.select()};
@@ -762,7 +815,9 @@ document.addEventListener('focusin',function(ev){var el=ev.target;if(el.dataset&
 document.addEventListener('focusout',function(ev){var el=ev.target;if(el.dataset&&el.dataset.b&&el.type==='text'&&el.dataset.t==='yen')el.value=yen(toNum(el.value))});
 
 function route(){var h=(location.hash||'').slice(1);tab=TABS.indexOf(h)>=0?h:'roadmap';render();window.scrollTo(0,0)}
-window.addEventListener('hashchange',route);
+window.addEventListener('hashchange',function(){route();if(syncUrl)pull()});
 route();
+pull();
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&syncUrl&&!sheetCtx)pull()});
 })();
 </script>

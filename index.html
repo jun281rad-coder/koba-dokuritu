@@ -143,7 +143,7 @@ nav.tabs a.cur{color:var(--accent);border-top-color:var(--accent)}
   <a href="#roadmap" data-tab="roadmap"><b>道のり</b>全体像</a>
   <a href="#funds" data-tab="funds"><b>資金</b>開業まで</a>
   <a href="#estimate" data-tab="estimate"><b>見積</b>費用の明細</a>
-  <a href="#after" data-tab="after"><b>開業後</b>試算表</a>
+  <a href="#after" data-tab="after"><b>開業後</b>資金繰り</a>
 </nav>
 <div id="sheet" hidden></div>
 
@@ -400,7 +400,7 @@ after:function(){
   '<section><h2>結果</h2><div class="scroll"><table class="kv" data-out="aftersum"></table></div></section>'+
   '<section><h2>体制の比較<small>同じ前提で並べる</small></h2><div class="scroll"><table data-out="compare"></table></div></section>'+
   '<section><h2>年別の概算<small>単位：千円</small></h2><div class="scroll"><table class="mon" data-out="yearly"></table></div><p class="note">事業の利益＝売上−固定費−人件費−採用時の初期費用−消費税（開業年は開業費用も控除）。青色申告特別控除の前の金額です。</p></section>'+
-  '<section><h2>残高試算表<small>単位：千円</small></h2><div class="scroll"><table class="mon" data-out="monthly"></table></div><p class="note">収支＝顧問料＋決算料−支出−税金。支出＝固定費＋人件費＋生活費＋国保年金＋返済＋採用時の初期費用。開業1〜12か月目の固定費は、開業費用で前払いした年会費等を除いた額。単月黒字化は、決算料を一括入金にしている間は顧問料だけで判定。分配率は決算料を月割にして計算。採用月は上線つき、赤字月は赤地。</p></section>';
+  '<section><h2>月次の資金繰り表<small>単位：千円</small></h2><div class="scroll"><table class="mon" data-out="monthly"></table></div><p class="note">収支＝顧問料＋決算料−支出−税金。支出＝固定費＋人件費＋生活費＋国保年金＋返済＋採用時の初期費用。開業1〜12か月目の固定費は、開業費用で前払いした年会費等を除いた額。単月黒字化は、決算料を一括入金にしている間は顧問料だけで判定。分配率は決算料を月割にして計算。採用月は上線つき、赤字月は赤地。</p></section>';
   return head+'<section><h2>前提</h2><div class="btns"><button data-act="preset1">1人版にする</button><button data-act="preset2">2人版にする</button></div><div class="form">'+
     inp('sim.clients','開業時の顧問先数',{t:'int',u:'件'})+inp('sim.growth','顧問先の増加',{t:'dec',u:'件/月'})+
     inp('sim.churn','年間の解約率',{t:'dec',u:'%',h:'仮置き。0で解約なし'})+inp('sim.ownerCap','所長が担当できる件数',{t:'int',u:'件',h:'仮置き。0で上限なし。スタッフ分は人員計画で加算'})+
@@ -506,7 +506,7 @@ reverse:function(C){
   return '<div class="scroll"><table class="kv"><tr><th>予定月に間に合う毎月の積立</th><td class="n">'+yen(needM)+'円<small>今は '+yen(P.monthly)+'円（差 '+yen(needM-P.monthly)+'円）</small></td></tr>'+
     '<tr><th>今のペースで届く月</th><td class="n">'+(reach?ymL(reach):'<span class="neg">30年以内に届かず</span>')+'<small>'+(reach?(rd>0?'予定より'+dur(rd)+'遅れ':rd<0?'予定より'+dur(rd)+'早い':'予定どおり'):'')+'</small></td></tr></table></div>';
 },
-loan:function(C){return C.loan?'元利均等で毎月 '+yen(C.loanPay)+'円を返済（開業1か月目から）。開業後の試算表の支出に入ります。':'借入なしで試算しています。'},
+loan:function(C){return C.loan?'元利均等で毎月 '+yen(C.loanPay)+'円を返済（開業1か月目から）。開業後の資金繰り表の支出に入ります。':'借入なしで試算しています。'},
 opencosts:function(C){
   var g='',h='<thead><tr><th>項目</th><th class="r">金額（円）</th></tr></thead><tbody>';
   var groups=[];state.openCosts.forEach(function(x){if(groups.indexOf(x.g)<0)groups.push(x.g)});

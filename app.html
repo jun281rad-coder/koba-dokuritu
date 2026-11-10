@@ -396,7 +396,11 @@ function adopt(plan){
   setBase(state.updatedAt);
   if(!sheetCtx)render();
 }
-var syncFail=function(){syncMsg('同期できません（この端末には保存済み）')};
+var syncFail=function(e){
+  var c=+(e&&e.message),why=c===404?'合言葉が Cloudflare の TOKEN と一致しません。両方に同じ合言葉を入れ直してください':
+    c===500?'サーバー側の設定（TOKEN か PLAN_KV）が足りません':c?'サーバーがエラーを返しました（'+c+'）':'サーバーに接続できません。アドレスと通信状態を確認してください';
+  syncMsg('同期できません：'+why+'。入力はこの端末には保存済みです');
+};
 function pull(){
   if(!syncUrl)return Promise.resolve();
   syncMsg('同期中…');
@@ -867,7 +871,7 @@ document.addEventListener('click',function(ev){
   }
   else if(a==='import')$('#imp').click();
   else if(a==='sync-save'){
-    var u=$('#syncurl').value.trim().replace(/\/+$/,'').replace(/\/(mcp|api\/plan)$/,'');
+    var u=$('#syncurl').value.replace(/\s+/g,'').replace(/\/+$/,'').replace(/\/(mcp|api\/plan)$/,'');
     if(!/^https:\/\/[^\/]+\/[^\/]{20,}$/.test(u)&&!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/[^\/]{20,}$/.test(u)){$('#syncstate').textContent='URLの形が違います。https://（ワーカーのアドレス）/（20文字以上の合言葉） の形で入れてください。';return}
     syncUrl=u;setBase(0);try{localStorage.setItem(SYNC_KEY,u)}catch(e){}
     render();pull();

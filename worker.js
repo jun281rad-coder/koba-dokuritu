@@ -501,8 +501,10 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods
 export default {
   async fetch(request, env) {
     const parts = new URL(request.url).pathname.split('/').filter(Boolean);
-    if (!env.TOKEN || String(env.TOKEN).length < 20 || !env.PLAN_KV) return json({ error: 'TOKEN（20文字以上）と PLAN_KV の設定が必要です' }, 500);
-    if (parts[0] !== env.TOKEN) return new Response('Not found', { status: 404 });
+    // 失敗の理由を画面側で読めるよう、エラーにも CORS の許可を付ける（中身は何も返さない）
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+    if (!env.TOKEN || String(env.TOKEN).length < 20 || !env.PLAN_KV) return json({ error: 'TOKEN（20文字以上）と PLAN_KV の設定が必要です' }, 500, CORS);
+    if (parts[0] !== env.TOKEN) return new Response('Not found', { status: 404, headers: CORS });
     const route = parts.slice(1).join('/');
 
     if (route === 'mcp') {
@@ -518,7 +520,6 @@ export default {
     }
 
     if (route === 'api/plan') {
-      if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
       const raw = await env.PLAN_KV.get('plan'), stored = raw ? JSON.parse(raw) : null;
       if (request.method === 'GET') return json({ plan: stored }, 200, CORS);
       if (request.method === 'PUT') {

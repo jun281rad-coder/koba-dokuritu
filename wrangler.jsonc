@@ -1,0 +1,10 @@
+// Cloudflare Workers の設定。Cloudflare がこのリポジトリから worker.js を自動で公開するときに読む。
+// 合言葉（TOKEN）はここに書かない。Cloudflare の画面でシークレットとして設定する。
+{
+  "name": "koba-dokuritu",
+  "main": "worker.js",
+  "compatibility_date": "2025-10-01",
+  "workers_dev": true,
+  // id を書かないと、初回の公開時に Cloudflare が入れ物（KV）を自動で作って割り当てる
+  "kv_namespaces": [{ "binding": "PLAN_KV" }]
+}

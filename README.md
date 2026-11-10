@@ -23,7 +23,8 @@ Cloudflare Workers に小さなサーバーを置くと、Claude が計画を読
 
 | ファイル | 役割 |
 | --- | --- |
-| `worker.js` | Cloudflare に貼るサーバー本体（`./build.sh` が自動生成） |
+| `worker.js` | サーバー本体（`./build.sh` が自動生成）。Cloudflare がこれを公開する |
+| `wrangler.jsonc` | Cloudflare の公開設定 |
 | `worker.src.js` | サーバーの雛形。編集するのはこちら |
 | `test-worker.mjs` | サーバーの検算（`node test-worker.mjs`） |
 
@@ -38,25 +39,25 @@ Claude から使える操作：
 | `upsert_item` | 節目・開業費用・固定費・人員の行を追加・変更する |
 | `delete_item` | 行を削除する |
 
-### 設定の手順（パソコンのブラウザが楽です）
+### 設定の手順
+
+Cloudflare がこのリポジトリを読んで、サーバーを自動で公開します（設定は `wrangler.jsonc`）。
 
 1. https://dash.cloudflare.com でアカウントを作ってログインする（無料）。
-2. 左メニューの「Storage & Databases」→「KV」で、名前 `dokuritsu-plan` の入れ物を作る。
-3. 左メニューの「Workers & Pages」→「Create」→「Hello World」から、名前 `dokuritsu-mcp` のワーカーを作って「Deploy」する。
-4. 「Edit code」を開き、最初から入っているコードを全部消して、`worker.js` の中身を貼り付けて「Deploy」する。
-   中身はここからコピーできます：
-   https://raw.githubusercontent.com/jun281rad-coder/koba-dokuritu/claude/zealous-mendel-ri835o/worker.js
-5. ワーカーの「Settings」→「Bindings」→「Add」→「KV namespace」で、Variable name を `PLAN_KV`、入れ物を `dokuritsu-plan` にして保存する。
-6. 独立ロードマップの画面で「道のり」タブ →「Claude連携」→「合言葉を作る」を押し、出てきた文字列をコピーする。
-7. ワーカーの「Settings」→「Variables and Secrets」→「Add」で、Type を `Secret`、名前を `TOKEN`、値に合言葉を貼って「Deploy」する。
-8. 独立ロードマップの画面の「連携URL」に `https://dokuritsu-mcp.（自分のサブドメイン）.workers.dev/（合言葉）` を入れて「保存して同期」を押す。右上が「サーバーと同期済み」になれば成功。
-9. 「Claudeに登録するURLをコピー」を押す（連携URLの末尾に `/mcp` が付いたもの）。
-10. https://claude.ai/customize/connectors でカスタムコネクタを追加し、URL に 9 でコピーしたものを貼る。認証の欄は空のままにする。
-11. 新しいチャットで「独立ロードマップの計画を読んで」と頼む。
+2. 左メニューの「Compute」→「Workers & Pages」→「Create」で、GitHub のリポジトリ `jun281rad-coder/koba-dokuritu` を取り込む。
+3. Project name は `koba-dokuritu` のまま、Build command は空、Deploy command は `npx wrangler deploy` のまま「Deploy」を押す。計画の入れ物（KV）は自動で作られる。
+4. 独立ロードマップの画面で「道のり」タブ →「Claude連携」→「合言葉を作る」を押し、出てきた文字列をコピーする。
+5. Cloudflare のワーカー `koba-dokuritu` の「Settings」→「Variables and Secrets」→「Add」で、Type を `Secret`、名前を `TOKEN`、値に合言葉を貼って保存（Deploy）する。
+6. 独立ロードマップの画面の「連携URL」に `https://koba-dokuritu.（自分のサブドメイン）.workers.dev/（合言葉）` を入れて「保存して同期」を押す。右上が「サーバーと同期済み」になれば成功。ワーカーのアドレスは Cloudflare のワーカーの画面に出ている。
+7. 「Claudeに登録するURLをコピー」を押す（連携URLの末尾に `/mcp` が付いたもの）。
+8. https://claude.ai/customize/connectors でカスタムコネクタを追加し、URL に 7 でコピーしたものを貼る。認証の欄は空のままにする。
+9. 新しいチャットで「独立ロードマップの計画を読んで」と頼む。
+
+以後、このリポジトリの公開中のブランチに変更が入るたびに、Cloudflare がサーバーを自動で公開し直す。
 
 ### 知っておくこと
 
-- 合言葉を含むURLを知っている人は、計画を読み書きできます。URLは他人に見せず、このリポジトリにも書かないでください。漏れたと思ったら、手順7で `TOKEN` を新しい合言葉に変えれば古いURLは使えなくなります。
+- 合言葉を含むURLを知っている人は、計画を読み書きできます。URLは他人に見せず、このリポジトリにも書かないでください。漏れたと思ったら、手順5で `TOKEN` を新しい合言葉に変えれば古いURLは使えなくなります。
 - 連携すると、計画は Cloudflare にも保存されます。2台目の端末でも、同じ連携URLを入れれば同じ計画が開きます。
 - Claude が書き換えた内容は、画面を開き直すかタブを切り替えたときに読み込まれます。
 - 画面で入力している途中に Claude が書き換えた場合は、Claude 側の内容が優先され、直前の入力は取り消されます（右上に表示されます）。

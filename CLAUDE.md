@@ -17,7 +17,7 @@
 2. `./build.sh` で `index.html` を作り直す
 3. `node test.js` と `node test-worker.mjs` がすべて合格することを確認する。計算を変えたら、正解の数字とテストも合わせて直す
 4. `app.html`・`index.html`・`worker.js` をまとめてコミットする
-5. `worker.js` が変わったときは、持ち主が Cloudflare のワーカーに貼り直すまでサーバーには反映されない。そのことを伝える
+5. Cloudflare がこのリポジトリの公開中のブランチを見ていて、プッシュのたびに `worker.js` を自動で公開する（設定は `wrangler.jsonc`、ワーカー名は `koba-dokuritu`）。`wrangler.jsonc` の `name` は Cloudflare 側のワーカー名と一致させる
 
 ## 公開
 

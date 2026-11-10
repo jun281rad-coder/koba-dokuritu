@@ -88,7 +88,7 @@ function defaults(){
       {id:uid(),label:'パート（総務専任）',on:false,start:25,monthly:100000,init:180000,cap:0,note:'月額は仮置き'},
       {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,monthly:50000,init:0,cap:0,note:'月額は仮置き。調査立会いはOB本人の税理士登録が前提'}
     ],
-    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0,varCost:0}
+    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0,varCost:0,kokuhoAuto:true,prevSalary:4000000,khAge40:false,khMembers:1,nenkin:17920}
   };
 }
 function migrate(s){
@@ -113,10 +113,29 @@ function loanPayment(S){
   var loan=Math.max(0,S.sim.loan),n=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200;
   return loan>0?(r>0?loan*r/(1-Math.pow(1+r,-n)):loan/n):0;
 }
-/* 所得税＋住民税＋個人事業税の概算。inc=青色申告特別控除前の事業の利益、mon=その年に事業をした月数 */
-function annualTax(S,inc,mon){
+/* 札幌市の国民健康保険料（令和8年度）。区分ごとに 所得割の料率・均等割（1人）・平等割（1世帯）・賦課限度額（年額）
+   医療分は札幌市の公式資料で確認。支援金分・介護分・子ども分は保険料の計算サイトで確認した数字（公式資料では未確認） */
+var KOKUHO=[
+  {k:'医療分',rate:0.0861,per:20550,house:32540,cap:670000},
+  {k:'支援金分',rate:0.0256,per:6330,house:10010,cap:260000},
+  {k:'介護分',rate:0.0233,per:6020,house:7550,cap:170000,age40:true},
+  {k:'子ども分',rate:0.0029,per:1100,house:1000,cap:30000}
+];
+/* 給与の年収（額面）から給与所得を出す（給与所得控除。令和7年分以降） */
+function salaryIncome(g){
+  if(!(g>0)) return 0;
+  var d=g<=1900000?650000:g<=3600000?g*0.3+80000:g<=6600000?g*0.2+440000:g<=8500000?g*0.1+1100000:1950000;
+  return Math.max(0,g-d);
+}
+/* 国保料の年額。income＝前年の所得（事業なら青色申告特別控除後）。基礎控除43万円を引いた額に料率を掛ける。低所得の軽減は見ていない */
+function kokuhoAnnual(S,income){
+  var base=Math.max(0,income-430000),n=Math.max(1,Math.round(S.sim.khMembers||1));
+  return sum(KOKUHO,function(q){return (q.age40&&!S.sim.khAge40)?0:Math.min(q.cap,base*q.rate+q.per*n+q.house)});
+}
+/* 所得税＋住民税＋個人事業税の概算。inc=青色申告特別控除前の事業の利益、mon=その年に事業をした月数、kokuhoY=その年に払う国保・年金（社会保険料控除） */
+function annualTax(S,inc,mon,kokuhoY){
   if(!S.sim.itaxOn||inc<=0) return 0;
-  var taxable=inc-650000-S.sim.deduct-S.sim.kokuho*mon;
+  var taxable=inc-650000-S.sim.deduct-(kokuhoY||0);
   return incomeTax(taxable)+Math.max(0,taxable+150000)*0.10+Math.max(0,inc-2900000*mon/12)*0.05;
 }
 /* 黒字が続くのに必要な顧問先数（2年目以降の固定費で計算）。
@@ -132,16 +151,18 @@ function monthlyAt(S,n,o){
   var fee=n*unit,kessanY=n*kes,salesY=fee*12+kessanY,varM=n*(S.sim.varCost||0);
   var biz=fee*(1-c)-varM-fixed-staff;                              // 税引前所得（月・決算料を除く）
   var preY=biz*12+kessanY*(1-c);                                   // 税引前所得（年）
-  var taxY=annualTax(S,preY,12),loanM=loanPayment(S);
-  var left=biz-taxY/12-S.sim.living-S.sim.kokuho-loanM;
+  // 国保・年金：自動なら、この所得が続いたときの国保料（札幌市）＋国民年金。手入力ならその金額
+  var kk=S.sim.kokuhoAuto?kokuhoAnnual(S,Math.max(0,preY-650000))/12+(S.sim.nenkin||0):S.sim.kokuho;
+  var taxY=annualTax(S,preY,12,kk*12),loanM=loanPayment(S);
+  var left=biz-taxY/12-S.sim.living-kk-loanM;
   var avg=S.sim.kessanMode==='avg'||o.price!=null,k=avg?kessanY/12:0;             // 決算料を月に均す設定なら、月間にも月割で入れる
   var y={sales:salesY,kessan:kessanY,varc:varM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
-    living:S.sim.living*12,kokuho:S.sim.kokuho*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
+    living:S.sim.living*12,kokuho:kk*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
   var mm={sales:fee+k,kessan:avg?k:null,varc:varM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
-    living:S.sim.living,kokuho:S.sim.kokuho,loan:loanM,left:left+k*(1-c)};
+    living:S.sim.living,kokuho:kk,loan:loanM,left:left+k*(1-c)};
   return {m:mm,y:y,n:n,fee:fee,kessanY:kessanY,salesY:salesY,varM:varM,ctax:fee*c,ctaxY:salesY*c,fixed:fixed,staff:staff,
     biz:biz,preY:preY,bizAnnual:preY,tax:taxY/12,taxY:taxY,afterM:biz-taxY/12,afterY:preY-taxY,
-    living:S.sim.living,kokuho:S.sim.kokuho,loan:loanM,left:left,kessanNet:kessanY*(1-c),annual:left*12+kessanY*(1-c)};
+    living:S.sim.living,kokuho:kk,loan:loanM,left:left,kessanNet:kessanY*(1-c),annual:left*12+kessanY*(1-c)};
 }
 /* 黒字が続くのに必要な顧問先数。o.living: 生活費・国保年金・返済・所得税等まで賄うか（false なら事業の利益だけ）
    o.annual: 決算料も含めた年間の合計で見るか。決算料を月に均す設定のときは、常に年間で見る */
@@ -198,7 +219,7 @@ function calcPlan(S,now,o){
     if(lump) ks=sum(cohorts,function(q){return (m-q.k+1)%12===0?q.n*S.sim.kessan:0});
     var rev=fee+ks,fxm=fixedAt(m),sm=staffM(m),si=staffI(m),lp=(loan>0&&m<=nPay)?loanPay:0,vr=cl*(S.sim.varCost||0);
     rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,capped:capped,fee:fee,ks:ks,rev:rev,revA:fee+kAvg,fx:fxm,vr:vr,staff:sm,init:si,
-      out:fxm+vr+sm+si+S.sim.living+S.sim.kokuho+lp,ctax:S.sim.ctaxOn?rev*S.sim.ctaxRate/100:0,itax:0,
+      out:fxm+vr+sm+si+S.sim.living+lp,kokuho:0,ctax:S.sim.ctaxOn?rev*S.sim.ctaxRate/100:0,itax:0,
       ratio:(fee+kAvg)>0?sm/(fee+kAvg):0,hire:staffOn.filter(function(s){return s.start===m})});
   }
   // 2) 所得税・住民税・個人事業税（暦年ごとの概算を、その年の月に均して積み立てる）
@@ -206,13 +227,25 @@ function calcPlan(S,now,o){
   rows.forEach(function(r){var y=r.ym.slice(0,4);if(!ymap[y]){ymap[y]={y:y,n:0,rev:0,profit:0,ctax:0,tax:0,rows:[]};years.push(ymap[y])}
     var Y=ymap[y];Y.n++;Y.rev+=r.rev;Y.ctax+=r.ctax;Y.profit+=r.rev-r.fx-r.vr-r.staff-r.init-r.ctax;Y.rows.push(r)});
   if(years.length) years[0].profit-=openCost;
+  // 2-a) 国保・年金。国保は4月〜翌3月の年度ごとに、前年の所得で決まる。開業前と開業年は退職前の給与も所得に入る
+  var openY=+open.slice(0,4),openMo=+open.slice(5,7);
+  var incomeOf=function(y){
+    if(y<openY) return salaryIncome(S.sim.prevSalary);
+    var Y=ymap[String(y)],biz=Y?Math.max(0,Y.profit*(y>openY&&Y.n<12?12/Y.n:1)-650000):0;
+    return y===openY?salaryIncome(S.sim.prevSalary*(openMo-1)/12)+biz:biz;
+  };
+  rows.forEach(function(r){
+    var y=+r.ym.slice(0,4),fy=+r.ym.slice(5,7)>=4?y:y-1;
+    r.kokuho=S.sim.kokuhoAuto?kokuhoAnnual(S,incomeOf(fy-1))/12+(S.sim.nenkin||0):S.sim.kokuho;
+    r.out+=r.kokuho;
+  });
   var carry=0;
   years.forEach(function(Y,idx){
     var partialEnd=idx>0&&idx===years.length-1&&Y.n<12;      // 試算が年の途中で終わる年は年換算して税率を決める
     var f=partialEnd?12/Y.n:1,inc=Y.profit*f+carry;
     if(inc<0){carry=inc;Y.tax=0;return}
     carry=0;
-    Y.tax=annualTax(S,inc,partialEnd?12:Y.n)/f;
+    Y.tax=annualTax(S,inc,partialEnd?12:Y.n,sum(Y.rows,function(r){return r.kokuho})*f)/f;
     Y.rows.forEach(function(r){r.itax=Y.tax/Y.n});
   });
   // 3) 残高
@@ -229,7 +262,7 @@ function calcPlan(S,now,o){
   var required=openCost+staffI(1)+month1*S.sim.buffer;
   return {now:now,open:open,preN:preN,pre:pre,accM:accM,accB:accB,accC:accC,projected:projected,funds:funds,openCost:openCost,
     fixedBase:fixedBase,fixed1:fixed1,loan:loan,loanPay:loanPay,price:price,rows:rows,years:years,ctaxT:ctaxT,itaxT:itaxT,b0:b0,minBal:minBal,minM:minM,firstBlack:firstBlack,firstBiz:firstBiz,stableM:lastRed<N?lastRed+1:0,
-    capM:capM,capEnd:capAt(N),month1:month1,var1:rows[0].vr,loan1:(loan>0?loanPay:0),staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
+    capM:capM,capEnd:capAt(N),month1:month1,kokuho1:rows[0].kokuho,var1:rows[0].vr,loan1:(loan>0?loanPay:0),staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
 }
 
 
@@ -256,7 +289,12 @@ const SIM = {
   kessan: N('決算料（1件あたり年1回・円）'),
   kessanMode: { type: 'string', enum: ['lump', 'avg'], description: '決算料の入金。lump=契約12か月目に一括、avg=毎月に均す' },
   living: N('生活費（月・円）'),
-  kokuho: N('国保・国民年金（月・円）'),
+  kokuhoAuto: B('true=国保・国民年金を所得から自動計算（札幌市の料率）、false=kokuho の手入力を使う'),
+  kokuho: N('国保・国民年金の手入力額（月・円）。kokuhoAuto=false のときだけ使う'),
+  prevSalary: N('退職前の年収（給与・額面・円）。開業した年と翌年の国保の計算に使う'),
+  khMembers: N('国保の加入者数（人）'),
+  khAge40: B('40歳以上か（国保に介護分がかかる）'),
+  nenkin: N('国民年金（月額・円）'),
   months: N('開業後に試算する月数（1〜120）'),
   buffer: N('運転資金として持つ月数'),
   autoFunds: B('true=開業時の手元資金を積立計画から計算、false=funds の手入力を使う'),

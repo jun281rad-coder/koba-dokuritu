@@ -3,8 +3,8 @@
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/app.html', 'utf8');
 const block = src.slice(src.indexOf('/*CALC-START*/'), src.indexOf('/*CALC-END*/'));
-const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt } =
-  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt};')();
+const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt, kokuhoAnnual, salaryIncome } =
+  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt,kokuhoAnnual,salaryIncome};')();
 
 let pass = 0, fail = 0;
 function eq(name, got, want, tol = 0.5) {
@@ -15,7 +15,7 @@ const NOW = '2026-11';
 // 引き継ぎ資料と同じ前提（解約なし・担当上限なし・税金なし）
 function base(mut) {
   const S = defaults();
-  Object.assign(S.sim, { churn: 0, ownerCap: 0, ctaxOn: false, itaxOn: false });
+  Object.assign(S.sim, { churn: 0, ownerCap: 0, ctaxOn: false, itaxOn: false, kokuhoAuto: false });
   if (mut) mut(S);
   return S;
 }
@@ -218,6 +218,35 @@ eq('整合：必要な手元資金', C.required, 211600 + 6 * C.month1, 1e-6);
 const St = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; });
 eq('損益分岐 税あり 3万円＝結果タブの必要件数', needClients(St, { price: 30000, living: true }), needClients(St, { living: true }));
 eq('損益分岐 実効単価4.5万円', needClients(base(), { price: 45000, living: true }), needClients(base(S => { S.sim.kessan = 180000; }), { living: true, annual: true }));
+
+// --- 国保・国民年金の自動計算（札幌市・令和8年度） ---
+eq('給与所得 年収400万', salaryIncome(4000000), 4000000 - (800000 + 440000));     // 2,760,000
+eq('給与所得 年収150万', salaryIncome(1500000), 850000);
+eq('給与所得 年収300万', salaryIncome(3000000), 3000000 - 980000);
+eq('給与所得 年収900万', salaryIncome(9000000), 9000000 - 1950000);
+const Sk = base(S => { S.sim.kokuhoAuto = true; });
+// 所得276万 → 基礎控除後233万。医療 233万×8.61%＋20,550＋32,540、支援 233万×2.56%＋6,330＋10,010、子ども 233万×0.29%＋1,100＋1,000
+eq('国保 所得276万・1人・40歳未満', kokuhoAnnual(Sk, 2760000), 2330000 * (0.0861 + 0.0256 + 0.0029) + 20550 + 32540 + 6330 + 10010 + 1100 + 1000, 1e-6);
+eq('国保 所得0は均等割と平等割だけ', kokuhoAnnual(Sk, 0), 71530);
+eq('国保 高所得は上限（40歳未満 96万円）', kokuhoAnnual(Sk, 30000000), 670000 + 260000 + 30000);
+eq('国保 40歳以上は介護分が加わる', kokuhoAnnual(base(S => { S.sim.khAge40 = true; }), 30000000), 1130000);
+eq('国保 2人世帯は均等割が2人分', kokuhoAnnual(base(S => { S.sim.khMembers = 2; }), 0), 71530 + 20550 + 6330 + 1100);
+C = calcPlan(Sk, NOW);                                 // 開業 2031年4月
+const kh0 = kokuhoAnnual(Sk, 2760000) / 12 + 17920;    // 前年が給与だけの年度
+eq('開業1か月目の国保年金は退職前の給与で決まる', C.rows[0].kokuho, kh0, 1e-6);
+eq('翌年3月まで同じ', C.rows[11].kokuho, kh0, 1e-6);
+// 2032年度（4月〜）は2031年の所得：給与3か月分（100万→所得35万）＋事業所得（2031年は赤字に近く、青色控除後0）
+eq('2年目の4月からは開業年の所得で決まる', C.rows[12].kokuho, kokuhoAnnual(Sk, salaryIncome(1000000) + Math.max(0, C.years[0].profit - 650000)) / 12 + 17920, 1e-6);
+eq('3年目の4月からは2年目の事業所得で決まる', C.rows[24].kokuho, kokuhoAnnual(Sk, Math.max(0, C.years[1].profit - 650000)) / 12 + 17920, 1e-6);
+eq('国保年金が支出に入る', C.rows[0].out, 385290 + kh0, 1e-6);
+eq('運転資金にも入る', C.required, 1233900 + 6 * (385290 + kh0), 1e-6);
+Mx = monthlyAt(Sk, 20, {});
+eq('損益表の国保年金（安定時）', Mx.m.kokuho, kokuhoAnnual(Sk, Mx.preY - 650000) / 12 + 17920, 1e-6);
+eq('手入力に切り替えるとその金額', monthlyAt(base(S => { S.sim.kokuho = 40000; }), 20, {}).m.kokuho, 40000);
+// 社会保険料控除として税額に反映される
+const St2 = base(S => { S.sim.itaxOn = true; S.sim.kokuhoAuto = true; }), M2 = monthlyAt(St2, 20, {});
+const tx2 = M2.preY - 650000 - 580000 - M2.y.kokuho;
+eq('国保年金は所得から引いて税額を計算', M2.y.tax, incomeTax(tx2) + (tx2 + 150000) * 0.10 + Math.max(0, M2.preY - 2900000) * 0.05, 1);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

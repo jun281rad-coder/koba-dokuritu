@@ -139,8 +139,8 @@ const left = n => { const rev = n * 360000, ct = rev * 0.045, inc = rev - ct - 1
 eq('必要件数 税金込み：その件数で黒字', left(nT) >= 0, true);
 eq('必要件数 税金込み：1件少ないと赤字', left(nT - 1) < 0, true);
 Sn = base(S => { S.sim.kessan = 180000; });            // 決算料あり・一括：毎月で見ると顧問料だけ、年間で見ると実効4.5万円
-eq('必要件数 決算料一括 毎月', needClients(Sn, { living: true }), 15);
-eq('必要件数 決算料一括 年間', needClients(Sn, { living: true, annual: true }), 10);   // 440,217 ÷ 45,000 = 9.78
+eq('必要件数 決算料あり 顧問料だけで見る', needClients(Sn, { living: true, feeOnly: true }), 15);
+eq('必要件数 決算料あり 決算料込み', needClients(Sn, { living: true }), 10);   // 440,217 ÷ 45,000 = 9.78
 C = calcPlan(base(), NOW);
 eq('黒字が続き始める月（税金なし）', C.stableM, 9);     // 9か月目：13件×3万＝39万 ≥ 38.5万。13か月目以降も 17件×3万＝51万 ≥ 44万
 eq('1〜8か月目は赤字', C.rows.slice(0, 8).every(r => r.red), true);
@@ -179,12 +179,14 @@ eq('変動費が支出に入る', C.rows[0].out, 385290 + 5000);
 eq('変動費が税引前所得から引かれる', C.years[0].profit, 2430000 - 85290 * 9 - 81000 - 1233900);
 
 // --- 月間と年間の損益がそろっていること ---
-Mx = monthlyAt(Sp, 20, { staff: 100000 });            // 決算料は一括：月間は決算料を除く
-eq('月間 売上', Mx.m.sales, 600000);
-eq('月間 税引前所得', Mx.m.pre, Mx.biz, 1e-6);
+Mx = monthlyAt(Sp, 20, { staff: 100000 });            // 月間は年間の12分の1（決算料は月平均）
+eq('月間 売上', Mx.m.sales, 600000 + 20 * 180000 / 12);
+eq('月間 税引前所得', Mx.m.pre, Mx.preY / 12, 1e-6);
+eq('顧問料だけの月の税引前所得', Mx.biz, 600000 * 0.955 - 20000 - 240217, 1e-6);
 eq('年間 税引前所得', Mx.y.pre, Mx.preY, 1e-6);
-eq('年間＝月間×12＋決算料（税引前）', Mx.m.pre * 12 + Mx.kessanNet, Mx.y.pre, 1e-6);
-eq('年間＝月間×12＋決算料（手残り）', Mx.m.left * 12 + Mx.kessanNet, Mx.y.left, 1e-6);
+eq('年間＝月間×12（税引前）', Mx.m.pre * 12, Mx.y.pre, 1e-6);
+eq('年間＝月間×12（手残り）', Mx.m.left * 12, Mx.y.left, 1e-6);
+eq('年間＝顧問料だけの月×12＋決算料', Mx.left * 12 + Mx.kessanNet, Mx.y.left, 1e-6);
 eq('月間の税額は年額の12分の1', Mx.m.tax * 12, Mx.y.tax, 1e-6);
 ['m', 'y'].forEach(k => { const v = Mx[k];
   eq(k + ' 税引前＝売上−変動費−固定費', v.sales - v.varc - v.ctax - v.fix - v.staff, v.pre, 1e-6);
@@ -217,7 +219,7 @@ eq('整合：必要な手元資金', C.required, 211600 + 6 * C.month1, 1e-6);
   eq(`損益分岐 税なし ${p} 手残り`, needClients(base(), { price: p, living: true }), b); });
 const St = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; });
 eq('損益分岐 税あり 3万円＝結果タブの必要件数', needClients(St, { price: 30000, living: true }), needClients(St, { living: true }));
-eq('損益分岐 実効単価4.5万円', needClients(base(), { price: 45000, living: true }), needClients(base(S => { S.sim.kessan = 180000; }), { living: true, annual: true }));
+eq('損益分岐 実効単価4.5万円', needClients(base(), { price: 45000, living: true }), needClients(base(S => { S.sim.kessan = 180000; }), { living: true }));
 
 // --- 国保・国民年金の自動計算（札幌市・令和8年度） ---
 eq('給与所得 年収400万', salaryIncome(4000000), 4000000 - (800000 + 440000));     // 2,760,000
@@ -247,6 +249,15 @@ eq('手入力に切り替えるとその金額', monthlyAt(base(S => { S.sim.kok
 const St2 = base(S => { S.sim.itaxOn = true; S.sim.kokuhoAuto = true; }), M2 = monthlyAt(St2, 20, {});
 const tx2 = M2.preY - 650000 - 580000 - M2.y.kokuho;
 eq('国保年金は所得から引いて税額を計算', M2.y.tax, incomeTax(tx2) + (tx2 + 150000) * 0.10 + Math.max(0, M2.preY - 2900000) * 0.05, 1);
+
+// --- 黒字の判定は決算料込みの年間で行い、表の手残りと食い違わないこと ---
+const Sm = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; S.sim.kessan = 150000; S.sim.kokuho = 20000; });
+const nA = needClients(Sm, { staff: 412000, living: true });
+eq('必要件数で年間の手残りがプラス', monthlyAt(Sm, nA, { staff: 412000 }).y.left >= 0, true);
+eq('1件少ないと年間の手残りがマイナス', monthlyAt(Sm, nA - 1, { staff: 412000 }).y.left < 0, true);
+eq('顧問料だけで見る件数のほうが多い', needClients(Sm, { staff: 412000, living: true, feeOnly: true }) > nA, true);
+C = calcPlan(base(S => { S.sim.kessan = 150000; S.sim.clients = 30; S.sim.growth = 0; }), NOW);
+eq('決算料を月割にならして黒字なら、黒字が続く月として数える', C.stableM, 1);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

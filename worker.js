@@ -138,11 +138,9 @@ function annualTax(S,inc,mon,kokuhoY){
   var taxable=inc-650000-S.sim.deduct-(kokuhoY||0);
   return incomeTax(taxable)+Math.max(0,taxable+150000)*0.10+Math.max(0,inc-2900000*mon/12)*0.05;
 }
-/* 黒字が続くのに必要な顧問先数（2年目以降の固定費で計算）。
-   o.staff: 人件費の月額／o.living: 生活費・国保年金・返済・所得税等まで賄うか／o.annual: 年間の合計で見るか（決算料込み）
-   o.annual でないときは、決算料が入らない月でも収支がプラスになる件数（決算料を月に均す設定なら月割込み） */
 /* 顧問先が n 件で安定したときの損益（2年目以降の固定費）。o.staff: 人件費の月額。金額はすべて円
-   月の数字（biz・afterM・left）は決算料が入らない月のもの。年の数字（…Y・annual）は決算料を含む
+   m＝月間、y＝年間。月間は年間の12分の1（決算料は顧問先ごとに決算月が違う前提で月平均にする）
+   biz・left は、決算料を当てにせず顧問料だけで見た月の数字（控えめな見方に使う）
    変動費＝1件あたりの変動費＋消費税の納税額（税込経理なので租税公課として費用に入る） */
 function monthlyAt(S,n,o){
   o=o||{};
@@ -155,23 +153,22 @@ function monthlyAt(S,n,o){
   var kk=S.sim.kokuhoAuto?kokuhoAnnual(S,Math.max(0,preY-650000))/12+(S.sim.nenkin||0):S.sim.kokuho;
   var taxY=annualTax(S,preY,12,kk*12),loanM=loanPayment(S);
   var left=biz-taxY/12-S.sim.living-kk-loanM;
-  var avg=S.sim.kessanMode==='avg'||o.price!=null,k=avg?kessanY/12:0;             // 決算料を月に均す設定なら、月間にも月割で入れる
+  var k=kessanY/12;                                                // 月間は決算料を月平均で入れる（月間×12＝年間）
   var y={sales:salesY,kessan:kessanY,varc:varM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
     living:S.sim.living*12,kokuho:kk*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
-  var mm={sales:fee+k,kessan:avg?k:null,varc:varM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
+  var mm={sales:fee+k,kessan:k,varc:varM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
     living:S.sim.living,kokuho:kk,loan:loanM,left:left+k*(1-c)};
   return {m:mm,y:y,n:n,fee:fee,kessanY:kessanY,salesY:salesY,varM:varM,ctax:fee*c,ctaxY:salesY*c,fixed:fixed,staff:staff,
     biz:biz,preY:preY,bizAnnual:preY,tax:taxY/12,taxY:taxY,afterM:biz-taxY/12,afterY:preY-taxY,
     living:S.sim.living,kokuho:kk,loan:loanM,left:left,kessanNet:kessanY*(1-c),annual:left*12+kessanY*(1-c)};
 }
-/* 黒字が続くのに必要な顧問先数。o.living: 生活費・国保年金・返済・所得税等まで賄うか（false なら事業の利益だけ）
-   o.annual: 決算料も含めた年間の合計で見るか。決算料を月に均す設定のときは、常に年間で見る */
+/* 黒字が続くのに必要な顧問先数。o.living: 生活費・国保年金・返済・所得税等まで賄うか（false なら税引前所得が黒字になる件数）
+   決算料を含めた年間の合計で判定する。o.feeOnly: 決算料を当てにせず、顧問料だけで判定する（控えめな見方） */
 function needClients(S,o){
   o=o||{};
   if(!((o.price!=null?o.price:S.sim.fee)>0)) return null;
-  var byYear=o.annual||S.sim.kessanMode==='avg'||o.price!=null;
   for(var n=1;n<=3000;n++){
-    var M=monthlyAt(S,n,o),v=o.living?(byYear?M.annual:M.left):(byYear?M.bizAnnual:M.biz);
+    var M=monthlyAt(S,n,o),v=o.feeOnly?(o.living?M.left:M.biz):(o.living?M.annual:M.preY);
     if(v>=0) return n;
   }
   return null;
@@ -253,8 +250,8 @@ function calcPlan(S,now,o){
   rows.forEach(function(r){
     r.tax=r.ctax+r.itax; r.net=r.rev-r.out-r.tax; b+=r.net; r.bal=b; ctaxT+=r.ctax; itaxT+=r.itax;
     if(b<minBal){minBal=b;minM=r.m}
-    var basis=lump?r.fee:r.revA;
-    r.red=basis-(r.out-r.init)-r.tax<0;          // 決算料の一括入金と採用時の初期費用を除いて赤字か
+    var basis=r.revA;                           // 決算料は月割にならして判定する
+    r.red=basis-(r.out-r.init)-r.tax<0;          // 決算料を月割にならし、採用時の初期費用を除いて赤字か
     if(r.red) lastRed=r.m; else if(!firstBlack) firstBlack=r.m;
     if(!firstBiz&&basis-r.fx-r.vr-r.staff-r.ctax>=0) firstBiz=r.m;
   });

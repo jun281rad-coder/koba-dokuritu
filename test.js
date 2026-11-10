@@ -3,8 +3,8 @@
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/app.html', 'utf8');
 const block = src.slice(src.indexOf('/*CALC-START*/'), src.indexOf('/*CALC-END*/'));
-const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt, kokuhoAnnual, salaryIncome } =
-  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt,kokuhoAnnual,salaryIncome};')();
+const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt, kokuhoAnnual, salaryIncome, staffCost } =
+  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt,kokuhoAnnual,salaryIncome,staffCost};')();
 
 let pass = 0, fail = 0;
 function eq(name, got, want, tol = 0.5) {
@@ -258,6 +258,20 @@ eq('1件少ないと年間の手残りがマイナス', monthlyAt(Sm, nA - 1, { 
 eq('顧問料だけで見る件数のほうが多い', needClients(Sm, { staff: 412000, living: true, feeOnly: true }) > nA, true);
 C = calcPlan(base(S => { S.sim.kessan = 150000; S.sim.clients = 30; S.sim.growth = 0; }), NOW);
 eq('決算料を月割にならして黒字なら、黒字が続く月として数える', C.stableM, 1);
+
+// --- 人員の総コスト（月給・賞与月数から自動計算） ---
+eq('ベテラン：月給30万・賞与2か月・社保15%・ツール9,500', staffCost({ salary: 300000, bonusMonths: 2, shaho: 15, tools: 9500 }), 412000);
+eq('資料の提示額：月給25万・賞与なし', staffCost({ salary: 250000, bonusMonths: 0, shaho: 15, tools: 9500 }), 250000 * 1.15 + 9500);
+eq('賞与4か月', staffCost({ salary: 300000, bonusMonths: 4, shaho: 15, tools: 9500 }), 400000 * 1.15 + 9500);
+eq('パート：社保なし', staffCost({ salary: 90000, bonusMonths: 0, shaho: 0, tools: 10000 }), 100000);
+defaults().staff.forEach(x => eq('初期値の月額は自動計算と一致 ' + x.label, x.monthly, staffCost(x)));
+const oldS = defaults(); oldS.staff.forEach(x => { delete x.salary; delete x.bonusMonths; delete x.shaho; delete x.tools; });
+oldS.staff[0].monthly = 123456;                        // 以前に手で直していた月額はそのまま残す
+const MS = migrate(JSON.parse(JSON.stringify(oldS)));
+eq('移行：ベテランの月給', vet(MS).salary, 300000);
+eq('移行：ベテランの総コスト', vet(MS).monthly, 412000);
+eq('移行：手で直した月額は変わらない', MS.staff[0].monthly, 123456);
+eq('移行：手で直した行は月給に入る', MS.staff[0].salary, 123456);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

@@ -90,6 +90,12 @@ eq('無いid', (await tool('upsert_item', { list: 'staff', id: 'zzz', fields: { 
 const vetId = (await tool('get_plan')).out.staff.find(x => /ベテラン/.test(x.label)).id;
 u = await tool('upsert_item', { list: 'staff', id: vetId, fields: { planned: true, start: 1 } });
 eq('ベテランを開業時から', u.out.results.staff_monthly_cost_planned, 412000);
+u = await tool('upsert_item', { list: 'staff', id: vetId, fields: { salary: 250000, bonus_months: 0 } });
+eq('月給と賞与月数から総コストを自動計算', u.out.item.monthly_total_cost, 250000 * 1.15 + 9500);
+eq('総コストは直接は書き換えられない', (await tool('upsert_item', { list: 'staff', id: vetId, fields: { monthly: 1 } })).err, true);
+u = await tool('upsert_item', { list: 'staff', fields: { label: '記帳スタッフ', salary: 200000, bonus_months: 1, social_insurance_rate: 15, tools: 10000, planned: false } });
+eq('新規の人員も自動計算', u.out.item.monthly_total_cost, Math.round(200000 * (1 + 1 / 12) * 1.15 + 10000));
+await tool('upsert_item', { list: 'staff', id: vetId, fields: { salary: 300000, bonus_months: 2 } });
 u = await tool('delete_item', { list: 'fixed_costs', id: newId });
 eq('固定費の削除', u.out.results.monthly_fixed_cost, 140217);
 eq('開業の節目は削除できない', (await tool('delete_item', { list: 'milestones', id: openId })).err, true);

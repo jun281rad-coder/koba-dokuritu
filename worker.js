@@ -83,10 +83,10 @@ function defaults(){
       fx('その他雑費','集客費',30000,'紹介中心＋成果報酬型サイト')
     ],
     staff:[
-      {id:uid(),label:'パート（記帳＋総務兼務）',on:false,start:7,monthly:100000,init:180000,cap:10,note:'月額・担当件数は仮置き（給与＋ツール約1万円）'},
-      {id:uid(),label:'ベテラン社員',on:false,start:13,monthly:412000,init:211600,cap:30,note:'月給30万＋賞与月割5万＋社保52,500＋ツール9,500。初期はPC等18万＋Claude Pro年払い'},
-      {id:uid(),label:'パート（総務専任）',on:false,start:25,monthly:100000,init:180000,cap:0,note:'月額は仮置き'},
-      {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,monthly:50000,init:0,cap:0,note:'月額は仮置き。調査立会いはOB本人の税理士登録が前提'}
+      {id:uid(),label:'パート（記帳＋総務兼務）',on:false,start:7,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:10,note:'月給・担当件数は仮置き。短時間勤務で社会保険なしの想定'},
+      {id:uid(),label:'ベテラン社員',on:false,start:13,salary:300000,bonusMonths:2,shaho:15,tools:9500,monthly:412000,init:211600,cap:30,note:'初期費用はPC等18万＋Claude Pro年払い'},
+      {id:uid(),label:'パート（総務専任）',on:false,start:25,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:0,note:'月給は仮置き。短時間勤務で社会保険なしの想定'},
+      {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,salary:50000,bonusMonths:0,shaho:0,tools:0,monthly:50000,init:0,cap:0,note:'報酬は仮置き。調査立会いはOB本人の税理士登録が前提'}
     ],
     sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0,varCost:0,kokuhoAuto:true,prevSalary:4000000,khAge40:false,khMembers:1,nenkin:17920}
   };
@@ -99,6 +99,16 @@ function migrate(s){
   s.ms.forEach(function(m){if(!okYm(m.ym)) m.ym=nowYm()});
   s.fixed.forEach(function(x){if(typeof x.pre!=='boolean') x.pre=/達人|弥生|税務通信|Google Workspace|セキュリティ|本会会費|支部会費|税賠/.test(x.label)});
   s.staff.forEach(function(x){if(typeof x.cap!=='number') x.cap=/ベテラン/.test(x.label)?30:/記帳/.test(x.label)?10:0});
+  // 月給・賞与月数から総コストを出す形への移行。以前の月額コストが変わらないように内訳を入れる
+  s.staff.forEach(function(x){
+    if(typeof x.salary!=='number'){
+      var m=x.monthly||0;
+      if(/ベテラン/.test(x.label)&&m===412000) Object.assign(x,{salary:300000,bonusMonths:2,shaho:15,tools:9500});
+      else if(/パート/.test(x.label)&&m===100000) Object.assign(x,{salary:90000,bonusMonths:0,shaho:0,tools:10000});
+      else Object.assign(x,{salary:m,bonusMonths:0,shaho:0,tools:0});
+    }
+    x.monthly=staffCost(x);
+  });
   s.updatedAt=s.updatedAt||0; s.v=1; return s;
 }
 /* ---------- 計算（画面に依存しない。test.js がこの範囲を取り出して検算する） ---------- */
@@ -108,6 +118,12 @@ function incomeTax(t){
   t=Math.floor(Math.max(0,t)/1000)*1000;
   var B=[[1949000,.05,0],[3299000,.10,97500],[6949000,.20,427500],[8999000,.23,636000],[17999000,.33,1536000],[39999000,.40,2796000],[Infinity,.45,4796000]];
   for(var i=0;i<B.length;i++) if(t<=B[i][0]) return (t*B[i][1]-B[i][2])*1.021;
+}
+/* 人員1人の月の総コスト＝月給＋賞与の月割＋社会保険の会社負担＋ツール代
+   社会保険は（月給＋賞与の月割）に掛ける。短時間のパートや外注は 0% */
+function staffCost(s){
+  var pay=(s.salary||0)*(1+(s.bonusMonths||0)/12);
+  return Math.round(pay*(1+(s.shaho||0)/100)+(s.tools||0));
 }
 function loanPayment(S){
   var loan=Math.max(0,S.sim.loan),n=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200;
@@ -319,7 +335,8 @@ const LISTS = {
     note: ['note', S('メモ')], prepaid: ['pre', B('初年度分を開業費用で前払いしているか。trueなら開業1〜12か月目は支出に入れない')] } },
   staff: { key: 'staff', label: '人員', fields: {
     label: ['label', S('役割')], planned: ['on', B('計画に入れる（採用する）か')], start: ['start', N('採用する月。開業月を1とする')],
-    monthly: ['monthly', N('月額コスト（円）。給与＋賞与月割＋社保＋ツール')], init: ['init', N('採用時の初期費用（円）')],
+    salary: ['salary', N('月給（額面・円）')], bonus_months: ['bonusMonths', N('賞与（年間の月数。例：2）')],
+    social_insurance_rate: ['shaho', N('社会保険の会社負担（%）。加入するなら約15、短時間のパートや外注は0')], tools: ['tools', N('ツール代（月・円）')], init: ['init', N('採用時の初期費用（円）')],
     cap: ['cap', N('担当できる顧問先数（件）')], note: ['note', S('メモ')] } },
 };
 const props = spec => Object.fromEntries(Object.entries(spec).map(([k, v]) => [k, Array.isArray(v) ? v[1] : v]));
@@ -400,6 +417,7 @@ function listOut(plan, name) {
     const o = { id: x.id };
     for (const [ext, [int]] of Object.entries(L.fields)) o[ext] = x[int];
     if (name === 'milestones') o.is_opening = x.kind === 'open';
+    if (name === 'staff') o.monthly_total_cost = x.monthly;   // 月給＋賞与月割＋社会保険＋ツール（自動計算・書き換え不可）
     return o;
   });
 }
@@ -458,10 +476,11 @@ function applyItem(plan, a) {
   } else {
     if (!vals.label) throw new Error('新しい行には label が必要です');
     const base = { milestones: { ym: nowJst(), done: false, cost: 0, note: '', kind: '' }, open_costs: { g: 'その他', amt: 0, note: '' },
-      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, staff: { on: true, start: 13, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
+      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, staff: { on: true, start: 13, salary: 0, bonusMonths: 0, shaho: 0, tools: 0, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
     row = Object.assign({ id: uid() }, base, vals);
     arr.push(row);
   }
+  if (a.list === 'staff') row.monthly = staffCost(row);   // 月の総コストは月給などから自動で出す
   return row.id;
 }
 

@@ -67,7 +67,8 @@ const LISTS = {
     note: ['note', S('メモ')], prepaid: ['pre', B('初年度分を開業費用で前払いしているか。trueなら開業1〜12か月目は支出に入れない')] } },
   staff: { key: 'staff', label: '人員', fields: {
     label: ['label', S('役割')], planned: ['on', B('計画に入れる（採用する）か')], start: ['start', N('採用する月。開業月を1とする')],
-    monthly: ['monthly', N('月額コスト（円）。給与＋賞与月割＋社保＋ツール')], init: ['init', N('採用時の初期費用（円）')],
+    salary: ['salary', N('月給（額面・円）')], bonus_months: ['bonusMonths', N('賞与（年間の月数。例：2）')],
+    social_insurance_rate: ['shaho', N('社会保険の会社負担（%）。加入するなら約15、短時間のパートや外注は0')], tools: ['tools', N('ツール代（月・円）')], init: ['init', N('採用時の初期費用（円）')],
     cap: ['cap', N('担当できる顧問先数（件）')], note: ['note', S('メモ')] } },
 };
 const props = spec => Object.fromEntries(Object.entries(spec).map(([k, v]) => [k, Array.isArray(v) ? v[1] : v]));
@@ -148,6 +149,7 @@ function listOut(plan, name) {
     const o = { id: x.id };
     for (const [ext, [int]] of Object.entries(L.fields)) o[ext] = x[int];
     if (name === 'milestones') o.is_opening = x.kind === 'open';
+    if (name === 'staff') o.monthly_total_cost = x.monthly;   // 月給＋賞与月割＋社会保険＋ツール（自動計算・書き換え不可）
     return o;
   });
 }
@@ -206,10 +208,11 @@ function applyItem(plan, a) {
   } else {
     if (!vals.label) throw new Error('新しい行には label が必要です');
     const base = { milestones: { ym: nowJst(), done: false, cost: 0, note: '', kind: '' }, open_costs: { g: 'その他', amt: 0, note: '' },
-      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, staff: { on: true, start: 13, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
+      fixed_costs: { g: 'その他雑費', amt: 0, note: '', pre: false }, staff: { on: true, start: 13, salary: 0, bonusMonths: 0, shaho: 0, tools: 0, monthly: 0, init: 0, cap: 0, note: '' } }[a.list];
     row = Object.assign({ id: uid() }, base, vals);
     arr.push(row);
   }
+  if (a.list === 'staff') row.monthly = staffCost(row);   // 月の総コストは月給などから自動で出す
   return row.id;
 }
 

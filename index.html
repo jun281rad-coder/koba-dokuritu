@@ -231,10 +231,10 @@ function defaults(){
       fx('その他雑費','集客費',30000,'紹介中心＋成果報酬型サイト')
     ],
     staff:[
-      {id:uid(),label:'パート（記帳＋総務兼務）',on:false,start:7,monthly:100000,init:180000,cap:10,note:'月額・担当件数は仮置き（給与＋ツール約1万円）'},
-      {id:uid(),label:'ベテラン社員',on:false,start:13,monthly:412000,init:211600,cap:30,note:'月給30万＋賞与月割5万＋社保52,500＋ツール9,500。初期はPC等18万＋Claude Pro年払い'},
-      {id:uid(),label:'パート（総務専任）',on:false,start:25,monthly:100000,init:180000,cap:0,note:'月額は仮置き'},
-      {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,monthly:50000,init:0,cap:0,note:'月額は仮置き。調査立会いはOB本人の税理士登録が前提'}
+      {id:uid(),label:'パート（記帳＋総務兼務）',on:false,start:7,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:10,note:'月給・担当件数は仮置き。短時間勤務で社会保険なしの想定'},
+      {id:uid(),label:'ベテラン社員',on:false,start:13,salary:300000,bonusMonths:2,shaho:15,tools:9500,monthly:412000,init:211600,cap:30,note:'初期費用はPC等18万＋Claude Pro年払い'},
+      {id:uid(),label:'パート（総務専任）',on:false,start:25,salary:90000,bonusMonths:0,shaho:0,tools:10000,monthly:100000,init:180000,cap:0,note:'月給は仮置き。短時間勤務で社会保険なしの想定'},
+      {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,salary:50000,bonusMonths:0,shaho:0,tools:0,monthly:50000,init:0,cap:0,note:'報酬は仮置き。調査立会いはOB本人の税理士登録が前提'}
     ],
     sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0,varCost:0,kokuhoAuto:true,prevSalary:4000000,khAge40:false,khMembers:1,nenkin:17920}
   };
@@ -247,6 +247,16 @@ function migrate(s){
   s.ms.forEach(function(m){if(!okYm(m.ym)) m.ym=nowYm()});
   s.fixed.forEach(function(x){if(typeof x.pre!=='boolean') x.pre=/達人|弥生|税務通信|Google Workspace|セキュリティ|本会会費|支部会費|税賠/.test(x.label)});
   s.staff.forEach(function(x){if(typeof x.cap!=='number') x.cap=/ベテラン/.test(x.label)?30:/記帳/.test(x.label)?10:0});
+  // 月給・賞与月数から総コストを出す形への移行。以前の月額コストが変わらないように内訳を入れる
+  s.staff.forEach(function(x){
+    if(typeof x.salary!=='number'){
+      var m=x.monthly||0;
+      if(/ベテラン/.test(x.label)&&m===412000) Object.assign(x,{salary:300000,bonusMonths:2,shaho:15,tools:9500});
+      else if(/パート/.test(x.label)&&m===100000) Object.assign(x,{salary:90000,bonusMonths:0,shaho:0,tools:10000});
+      else Object.assign(x,{salary:m,bonusMonths:0,shaho:0,tools:0});
+    }
+    x.monthly=staffCost(x);
+  });
   s.updatedAt=s.updatedAt||0; s.v=1; return s;
 }
 /* ---------- 計算（画面に依存しない。test.js がこの範囲を取り出して検算する） ---------- */
@@ -256,6 +266,12 @@ function incomeTax(t){
   t=Math.floor(Math.max(0,t)/1000)*1000;
   var B=[[1949000,.05,0],[3299000,.10,97500],[6949000,.20,427500],[8999000,.23,636000],[17999000,.33,1536000],[39999000,.40,2796000],[Infinity,.45,4796000]];
   for(var i=0;i<B.length;i++) if(t<=B[i][0]) return (t*B[i][1]-B[i][2])*1.021;
+}
+/* 人員1人の月の総コスト＝月給＋賞与の月割＋社会保険の会社負担＋ツール代
+   社会保険は（月給＋賞与の月割）に掛ける。短時間のパートや外注は 0% */
+function staffCost(s){
+  var pay=(s.salary||0)*(1+(s.bonusMonths||0)/12);
+  return Math.round(pay*(1+(s.shaho||0)/100)+(s.tools||0));
 }
 function loanPayment(S){
   var loan=Math.max(0,S.sim.loan),n=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200;
@@ -750,10 +766,10 @@ breakeven:function(C){
     (parts.length?'計算に含めているもの：'+parts.join('、')+'。これらを入れない設定にすると、引き継ぎ資料の件数（3万円なら5件・15件）と一致します。':'変動費・税金を入れない設定なので、引き継ぎ資料の件数と一致します。')+'</p>';
 },
 staff:function(C){
-  var h='<thead><tr><th>人員</th><th class="r">開始</th><th class="r">月額（円）</th><th class="r">計画</th></tr></thead><tbody>';
+  var h='<thead><tr><th>人員</th><th class="r">開始</th><th class="r">総コスト<br>（月）</th><th class="r">計画</th></tr></thead><tbody>';
   state.staff.forEach(function(s){
     var rev=s.monthly/0.4;
-    h+='<tr class="tap" data-act="edit-st" data-id="'+s.id+'" tabindex="0"><td>'+esc(s.label)+'<span class="memo">担当 +'+(s.cap||0)+'件／分配率40%の目安：月商 '+yen(rev)+'円（'+need(rev,C.price)+'件）</span></td><td class="r n">'+s.start+'か月目</td><td class="r n">'+yen(s.monthly)+'</td><td class="r"><button class="'+(s.on?'on':'')+'" data-act="toggle-st" data-id="'+s.id+'" aria-pressed="'+s.on+'">'+(s.on?'採用':'未定')+'</button></td></tr>';
+    h+='<tr class="tap" data-act="edit-st" data-id="'+s.id+'" tabindex="0"><td>'+esc(s.label)+'<span class="memo">月給 '+yen(s.salary)+'円'+(s.bonusMonths?'・賞与 '+s.bonusMonths+'か月':'')+(s.shaho?'・社保 '+s.shaho+'%':'')+(s.tools?'・ツール '+yen(s.tools)+'円':'')+'</span><span class="memo">担当 +'+(s.cap||0)+'件／分配率40%の目安：月商 '+yen(rev)+'円（'+need(rev,C.price)+'件）</span></td><td class="r n">'+s.start+'か月目</td><td class="r n">'+yen(s.monthly)+'</td><td class="r"><button class="'+(s.on?'on':'')+'" data-act="toggle-st" data-id="'+s.id+'" aria-pressed="'+s.on+'">'+(s.on?'採用':'未定')+'</button></td></tr>';
   });
   var all=C.staffMAll;
   return h+'<tr class="total"><td>採用する人員の人件費 計</td><td></td><td class="r n">'+yen(all)+'</td><td></td></tr>'+
@@ -853,17 +869,22 @@ function openSheet(o){
     var v=o.value[f.k],id='f_'+f.k;
     if(f.t==='chk') h+='<label class="chk full"><input type="checkbox" id="'+id+'"'+(v?' checked':'')+'>'+f.l+'</label>';
     else if(f.t==='area') h+='<label class="f full" for="'+id+'">'+f.l+'<span class="inp"><textarea id="'+id+'" readonly>'+esc(v)+'</textarea></span></label>';
-    else h+='<label class="f'+(f.full?' full':'')+'" for="'+id+'">'+f.l+'<span class="inp"><input id="'+id+'" '+(f.t==='ym'?'type="month"':f.t==='text'?'type="text" class="t"':'type="text" inputmode="numeric"')+' value="'+esc(f.t==='yen'?yen(v):v)+'" autocomplete="off">'+(f.u?'<i>'+f.u+'</i>':'')+'</span>'+(f.h?'<span class="h">'+f.h+'</span>':'')+'</label>';
+    else h+='<label class="f'+(f.full?' full':'')+'" for="'+id+'">'+f.l+'<span class="inp"><input id="'+id+'" '+(f.t==='ym'?'type="month"':f.t==='text'?'type="text" class="t"':'type="text" inputmode="'+(f.t==='dec'?'decimal':'numeric')+'"')+' value="'+esc(f.t==='yen'?yen(v):v)+'" autocomplete="off">'+(f.u?'<i>'+f.u+'</i>':'')+'</span>'+(f.h?'<span class="h">'+f.h+'</span>':'')+'</label>';
   });
-  h+='</div><div class="btns">'+(o.onSave?'<button class="pri" data-act="sheet-save">'+(o.saveLabel||'保存')+'</button>':'')+'<button data-act="sheet-close">'+(o.onSave?'やめる':'閉じる')+'</button>'+(o.onDelete?'<button class="danger" data-act="sheet-del" style="margin-left:auto">削除</button>':'')+'</div></div>';
+  h+='</div>'+(o.live?'<p class="note" id="sheetlive" style="color:var(--ink);font-weight:500"></p>':'')+'<div class="btns">'+(o.onSave?'<button class="pri" data-act="sheet-save">'+(o.saveLabel||'保存')+'</button>':'')+'<button data-act="sheet-close">'+(o.onSave?'やめる':'閉じる')+'</button>'+(o.onDelete?'<button class="danger" data-act="sheet-del" style="margin-left:auto">削除</button>':'')+'</div></div>';
   var el=$('#sheet');el.innerHTML=h;el.hidden=false;
+  if(o.live)$('#sheetlive').textContent=o.live(sheetRead());
+}
+function sheetRead(){
+  var o=sheetCtx,out={};
+  o.fields.forEach(function(f){var el=$('#f_'+f.k);
+    out[f.k]=f.t==='chk'?el.checked:(f.t==='yen'||f.t==='int')?Math.round(toNum(el.value)):f.t==='dec'?toNum(el.value):(f.t==='ym'?(okYm(el.value)?el.value:o.value[f.k]):el.value.trim())});
+  return out;
 }
 function closeSheet(){$('#sheet').hidden=true;$('#sheet').innerHTML='';sheetCtx=null}
 function sheetSave(){
-  var o=sheetCtx,out={};
-  o.fields.forEach(function(f){var el=$('#f_'+f.k);
-    out[f.k]=f.t==='chk'?el.checked:(f.t==='yen'||f.t==='int')?Math.round(toNum(el.value)):(f.t==='ym'?(okYm(el.value)?el.value:o.value[f.k]):el.value.trim())});
-  o.onSave(out);closeSheet();save();render();
+  var o=sheetCtx;
+  o.onSave(sheetRead());closeSheet();save();render();
 }
 var byId=function(arr,id){return arr.filter(function(x){return x.id===id})[0]};
 var rm=function(key,id){state[key]=state[key].filter(function(x){return x.id!==id})};
@@ -880,10 +901,18 @@ function editItem(key,x,isNew,title){
     onSave:function(v){if(!v.label)v.label='（無題）';if(!v.g)v.g='その他';Object.assign(x,v);if(isNew)state[key].push(x)},
     onDelete:isNew?null:function(){rm(key,x.id)}});
 }
+function staffLive(v){
+  var pay=v.salary*(1+v.bonusMonths/12),sh=pay*v.shaho/100;
+  return '月の総コスト '+yen(staffCost(v))+'円 ＝ 月給 '+yen(v.salary)+(v.bonusMonths?' ＋ 賞与の月割 '+yen(pay-v.salary):'')+(sh?' ＋ 社会保険 '+yen(sh):'')+(v.tools?' ＋ ツール '+yen(v.tools):'')+'。年額 '+yen(staffCost(v)*12)+'円';
+}
 function editSt(s,isNew){
-  openSheet({title:isNew?'人員を追加':'人員を編集',value:s,
-    fields:[{k:'label',l:'役割',t:'text',full:1},{k:'start',l:'採用する月',t:'int',u:'か月目',h:'開業月を1か月目とする'},{k:'monthly',l:'月額コスト',t:'yen',u:'円',h:'給与＋賞与月割＋社保約15%＋ツール約1万円'},{k:'init',l:'採用時の初期費用',t:'yen',u:'円',h:'PC等 約18万円'},{k:'cap',l:'担当できる顧問先数',t:'int',u:'件',h:'事務所の担当上限に加算。総務など担当を持たない人は0'},{k:'note',l:'メモ',t:'text',full:1},{k:'on',l:'計画に入れる（採用）',t:'chk'}],
-    onSave:function(v){if(!v.label)v.label='（無題）';v.start=Math.max(1,v.start||1);Object.assign(s,v);if(isNew)state.staff.push(s)},
+  openSheet({title:isNew?'人員を追加':'人員を編集',value:s,live:staffLive,
+    fields:[{k:'label',l:'役割',t:'text',full:1},
+      {k:'salary',l:'月給（額面）',t:'yen',u:'円'},{k:'bonusMonths',l:'賞与（年間）',t:'dec',u:'か月分'},
+      {k:'shaho',l:'社会保険の会社負担',t:'dec',u:'%',h:'加入するなら約15%。短時間のパートや外注は0'},{k:'tools',l:'ツール代（月）',t:'yen',u:'円',h:'Google Workspace・Claude など。約1万円'},
+      {k:'start',l:'採用する月',t:'int',u:'か月目',h:'開業月を1か月目とする'},{k:'init',l:'採用時の初期費用',t:'yen',u:'円',h:'PC等 約18万円'},
+      {k:'cap',l:'担当できる顧問先数',t:'int',u:'件',h:'事務所の担当上限に加算。総務など担当を持たない人は0'},{k:'note',l:'メモ',t:'text',full:1},{k:'on',l:'計画に入れる（採用）',t:'chk'}],
+    onSave:function(v){if(!v.label)v.label='（無題）';v.start=Math.max(1,v.start||1);Object.assign(s,v);s.monthly=staffCost(s);if(isNew)state.staff.push(s)},
     onDelete:isNew?null:function(){rm('staff',s.id)}});
 }
 
@@ -918,7 +947,7 @@ document.addEventListener('click',function(ev){
   else if(a==='add-fx')editItem('fixed',{id:uid(),g:'その他雑費',label:'',amt:0,note:'',pre:false},true,'固定費に行を追加');
   else if(a==='toggle-st'){ev.stopPropagation();var s=byId(state.staff,id);s.on=!s.on;save();refresh()}
   else if(a==='edit-st')editSt(byId(state.staff,id));
-  else if(a==='add-st')editSt({id:uid(),label:'',on:true,start:13,monthly:100000,init:180000,cap:0,note:''},true);
+  else if(a==='add-st')editSt({id:uid(),label:'',on:true,start:13,salary:200000,bonusMonths:0,shaho:15,tools:10000,monthly:240000,init:180000,cap:0,note:''},true);
   else if(a==='sub'){afterSub=t.dataset.v;render();window.scrollTo(0,0)}
   else if(a==='plv'){plView=t.dataset.v;render()}
   else if(a==='sheet-save')sheetSave();
@@ -978,6 +1007,7 @@ document.addEventListener('change',function(ev){
   fr.onerror=bad;fr.readAsText(ev.target.files[0]);ev.target.value='';
 });
 document.addEventListener('input',function(ev){if(ev.target.id==='viewn'){viewN=Math.max(0,Math.round(toNum(ev.target.value)));refresh()}});
+document.addEventListener('input',function(ev){if(sheetCtx&&sheetCtx.live&&ev.target.closest&&ev.target.closest('#sheet'))$('#sheetlive').textContent=sheetCtx.live(sheetRead())});
 document.addEventListener('input',bound);
 document.addEventListener('change',bound);
 document.addEventListener('focusin',function(ev){var el=ev.target;if(el.dataset&&el.dataset.b&&el.type==='text'){el.value=String(toNum(el.value));el.select()}});

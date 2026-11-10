@@ -275,12 +275,13 @@ function annualTax(S,inc,mon){
 function monthlyAt(S,n,o){
   o=o||{};
   var fixed=sum(S.fixed,function(x){return x.amt}),staff=o.staff||0,c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
-  var fee=n*S.sim.fee,kessanY=n*S.sim.kessan,salesY=fee*12+kessanY,varM=n*(S.sim.varCost||0);
+  var unit=o.price!=null?o.price:S.sim.fee,kes=o.price!=null?0:S.sim.kessan;   // o.price: 決算料込みの実効単価で計算する
+  var fee=n*unit,kessanY=n*kes,salesY=fee*12+kessanY,varM=n*(S.sim.varCost||0);
   var biz=fee*(1-c)-varM-fixed-staff;                              // 税引前所得（月・決算料を除く）
   var preY=biz*12+kessanY*(1-c);                                   // 税引前所得（年）
   var taxY=annualTax(S,preY,12),loanM=loanPayment(S);
   var left=biz-taxY/12-S.sim.living-S.sim.kokuho-loanM;
-  var avg=S.sim.kessanMode==='avg',k=avg?kessanY/12:0;             // 決算料を月に均す設定なら、月間にも月割で入れる
+  var avg=S.sim.kessanMode==='avg'||o.price!=null,k=avg?kessanY/12:0;             // 決算料を月に均す設定なら、月間にも月割で入れる
   var y={sales:salesY,kessan:kessanY,varc:varM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
     living:S.sim.living*12,kokuho:S.sim.kokuho*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
   var mm={sales:fee+k,kessan:avg?k:null,varc:varM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
@@ -293,8 +294,8 @@ function monthlyAt(S,n,o){
    o.annual: 決算料も含めた年間の合計で見るか。決算料を月に均す設定のときは、常に年間で見る */
 function needClients(S,o){
   o=o||{};
-  if(!(S.sim.fee>0)) return null;
-  var byYear=o.annual||S.sim.kessanMode==='avg';
+  if(!((o.price!=null?o.price:S.sim.fee)>0)) return null;
+  var byYear=o.annual||S.sim.kessanMode==='avg'||o.price!=null;
   for(var n=1;n<=3000;n++){
     var M=monthlyAt(S,n,o),v=o.living?(byYear?M.annual:M.left):(byYear?M.bizAnnual:M.biz);
     if(v>=0) return n;
@@ -371,11 +372,11 @@ function calcPlan(S,now,o){
     if(r.red) lastRed=r.m; else if(!firstBlack) firstBlack=r.m;
     if(!firstBiz&&basis-r.fx-r.vr-r.staff-r.ctax>=0) firstBiz=r.m;
   });
-  var fixed1=fixedAt(1),month1=fixed1+staffM(1)+S.sim.living+S.sim.kokuho;
+  var fixed1=fixedAt(1),month1=rows[0].out-rows[0].init;      // 固定費＋変動費＋人件費＋生活費＋国保年金＋返済
   var required=openCost+staffI(1)+month1*S.sim.buffer;
   return {now:now,open:open,preN:preN,pre:pre,accM:accM,accB:accB,accC:accC,projected:projected,funds:funds,openCost:openCost,
     fixedBase:fixedBase,fixed1:fixed1,loan:loan,loanPay:loanPay,price:price,rows:rows,years:years,ctaxT:ctaxT,itaxT:itaxT,b0:b0,minBal:minBal,minM:minM,firstBlack:firstBlack,firstBiz:firstBiz,stableM:lastRed<N?lastRed+1:0,
-    capM:capM,capEnd:capAt(N),month1:month1,staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
+    capM:capM,capEnd:capAt(N),month1:month1,var1:rows[0].vr,loan1:(loan>0?loanPay:0),staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
 }
 /*CALC-END*/
 
@@ -641,7 +642,7 @@ required:function(C){
   var S=state.sim,r=function(a,b,c){return '<tr'+(c?' class="'+c+'"':'')+'><td>'+a+'</td><td class="r n">'+b+'</td></tr>'};
   return r('開業費用（見積タブ）',yen(C.openCost))+
     (C.staffInit1?r('開業時採用の初期費用',yen(C.staffInit1)):'')+
-    r('運転資金 '+S.buffer+'か月分<span class="memo">月額 '+yen(C.month1)+'円 ＝ 固定費 '+yen(C.fixed1)+'（前払い分を除く）'+(C.staffM1?' ＋ 人件費 '+yen(C.staffM1):'')+' ＋ 生活費 '+yen(S.living)+(S.kokuho?' ＋ 国保年金 '+yen(S.kokuho):'')+'</span>',yen(C.month1*S.buffer))+
+    r('運転資金 '+S.buffer+'か月分<span class="memo">月額 '+yen(C.month1)+'円 ＝ 固定費 '+yen(C.fixed1)+'（前払い分を除く）'+(C.var1?' ＋ 変動費 '+yen(C.var1):'')+(C.staffM1?' ＋ 人件費 '+yen(C.staffM1):'')+' ＋ 生活費 '+yen(S.living)+(S.kokuho?' ＋ 国保年金 '+yen(S.kokuho):'')+(C.loan1?' ＋ 借入の返済 '+yen(C.loan1):'')+'。資金繰り表の1か月目の支出と同じ</span>',yen(C.month1*S.buffer))+
     r('必要な手元資金',yen(C.required)+'円','total');
 },
 projected:function(C){
@@ -696,14 +697,17 @@ breakeven:function(C){
   var S=state.sim,prices=[20000,30000,40000,50000];
   if(prices.indexOf(Math.round(C.price))<0) prices.push(Math.round(C.price));
   prices.sort(function(a,b){return a-b});
-  var tbl=function(cap,fixed){
-    return '<h3>'+cap+'　固定費 '+yen(fixed)+'円／月</h3><div class="scroll"><table><thead><tr><th>単価（月）</th><th class="r">固定費のみ</th><th class="r">生活費込み</th></tr></thead><tbody>'+
-    prices.map(function(p){return '<tr'+(p===Math.round(C.price)?' class="sub"':'')+'><td class="n">'+yen(p)+'円'+(p===Math.round(C.price)?'<span class="memo">いまの実効単価</span>':'')+'</td><td class="r n">'+need(fixed,p)+'件</td><td class="r n">'+need(fixed+S.living+S.kokuho,p)+'件</td></tr>'}).join('')+'</tbody></table></div>';
+  var tbl=function(cap,staff){
+    return '<h3>'+cap+'　固定費 '+yen(C.fixedBase+staff)+'円／月</h3><div class="scroll"><table><thead><tr><th>単価（月）</th><th class="r">税引前所得<br>が黒字</th><th class="r">手残り<br>がプラス</th></tr></thead><tbody>'+
+    prices.map(function(p){var a=needClients(state,{staff:staff,price:p}),b=needClients(state,{staff:staff,price:p,living:true});
+      return '<tr'+(p===Math.round(C.price)?' class="sub"':'')+'><td class="n">'+yen(p)+'円'+(p===Math.round(C.price)?'<span class="memo">いまの実効単価</span>':'')+'</td><td class="r n">'+(a==null?'―':a+'件')+'</td><td class="r n">'+(b==null?'―':b+'件')+'</td></tr>'}).join('')+'</tbody></table></div>';
   };
-  var h=tbl('所長1人',C.fixedBase);
-  if(C.staffMAll) h+=tbl('採用後（開業後タブでONの全員）',C.fixedBase+C.staffMAll);
-  else h+=tbl('2人版（ベテラン社員を採用）',C.fixedBase+((state.staff.filter(function(s){return /ベテラン/.test(s.label)})[0]||{}).monthly||412000));
-  return h+'<p class="note">固定費は2年目以降の月額。生活費込みは 生活費 '+yen(S.living)+'円'+(S.kokuho?'＋国保年金 '+yen(S.kokuho)+'円':'')+' を固定費に足して計算。</p>';
+  var h=tbl('所長1人',0);
+  if(C.staffMAll) h+=tbl('採用後（開業後タブでONの全員）',C.staffMAll);
+  else h+=tbl('2人版（ベテラン社員を採用）',(state.staff.filter(function(s){return /ベテラン/.test(s.label)})[0]||{}).monthly||412000);
+  var parts=[];if(S.varCost)parts.push('変動費 '+yen(S.varCost)+'円/件');if(S.ctaxOn)parts.push('消費税 '+S.ctaxRate+'%');if(S.itaxOn)parts.push('所得税・住民税・事業税');
+  return h+'<p class="note">「開業後」タブの結果と同じ計算です。単価は決算料込みの実効単価として扱い、年間で見ています。固定費は2年目以降の月額。「手残りがプラス」は 生活費 '+yen(S.living)+'円'+(S.kokuho?'・国保年金 '+yen(S.kokuho)+'円':'')+(C.loan?'・借入の返済':'')+' まで払える件数。'+
+    (parts.length?'計算に含めているもの：'+parts.join('、')+'。これらを入れない設定にすると、引き継ぎ資料の件数（3万円なら5件・15件）と一致します。':'変動費・税金を入れない設定なので、引き継ぎ資料の件数と一致します。')+'</p>';
 },
 staff:function(C){
   var h='<thead><tr><th>人員</th><th class="r">開始</th><th class="r">月額（円）</th><th class="r">計画</th></tr></thead><tbody>';
@@ -737,7 +741,7 @@ compare:function(C){
     ['開業1年目の月の支出<span class="memo">生活費込み・税金除く</span>',function(c){return yen(c.month1)}],
     ['必要な手元資金',function(c){return yen(c.required)}],
     ['過不足',function(c){return red(c.gap,yen(c.gap))}],
-    ['損益分岐の顧問先数<span class="memo">生活費込み・2年目以降</span>',function(c){return need(c.fixedBase+c.staffMAll+S.living+S.kokuho,c.price)+'件'}],
+    ['手残りが毎月プラスになる件数<span class="memo">生活費・税金込み</span>',function(c){var n=needClients(state,{staff:c.staffMAll,living:true});return n==null?'―':n+'件'}],
     ['毎月黒字が続き始める月<span class="memo">生活費・税金込み</span>',function(c){return c.stableM?c.stableM+'か月目':red(-1,'届かず')}],
     ['残高の底',function(c){return red(c.minBal,yen(c.minBal))+(c.minM?'<span class="memo">'+c.minM+'か月目</span>':'')}],
     [C.N+'か月目の顧問先数',function(c){return Math.round(c.rows[c.N-1].clients*10)/10+'件'+(c.capM?'<span class="memo neg">'+c.capM+'か月目に上限</span>':'')}],

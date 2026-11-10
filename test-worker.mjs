@@ -52,7 +52,7 @@ let g = (await tool('get_plan')).out;
 eq('開業費用', g.results.opening_cost, 1233900);
 eq('月の固定費', g.results.monthly_fixed_cost, 140217);
 eq('必要な手元資金', g.results.required_funds, 3545640);
-eq('損益分岐 3万円', g.results.break_even_clients_by_price.owner_only['30000'], { fixed_only: 5, with_living: 15 });
+eq('損益分岐 3万円', g.results.break_even_clients_by_price.owner_only['30000'], { income_before_tax_in_black: 5, cash_left_positive_after_living_and_tax: 18 });
 eq('節目の数', g.milestones.length, 11);
 eq('開業の節目', g.milestones.filter(m => m.is_opening).map(m => m.ym), ['2031-04']);
 const cf = (await tool('get_cashflow')).out;

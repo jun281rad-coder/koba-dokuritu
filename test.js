@@ -194,6 +194,31 @@ const Sa = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; S.sim.kessan = 
 Mx = monthlyAt(Sa, 20, {});                            // 決算料を月に均す：月間は年間の12分の1
 ['sales', 'ctax', 'pre', 'after', 'left'].forEach(k => eq('月割 ' + k, Mx.m[k] * 12, Mx.y[k], 1e-6));
 
+// --- 支出の整合性：資金繰り表・損益表・必要資金・損益分岐が同じ数字を使っていること ---
+const Sc = base(S => { S.ms.find(m => m.kind === 'open').ym = '2031-01'; S.openCosts = [];
+  Object.assign(S.sim, { clients: 30, growth: 0, kessan: 180000, varCost: 1000, kokuho: 40000, loan: 3000000, loanYears: 7, loanRate: 2.5, ctaxOn: true, itaxOn: true });
+  vet(S).on = true; vet(S).start = 1; });
+C = calcPlan(Sc, NOW); Mx = monthlyAt(Sc, 30, { staff: 412000 });
+const Y2 = C.years[1], tot = k => Y2.rows.reduce((t, r) => t + r[k], 0);      // 2032年（開業2年目・通年）
+eq('整合：売上', tot('rev'), Mx.y.sales, 1);
+eq('整合：変動費', tot('vr'), Mx.y.varc, 1);
+eq('整合：消費税', tot('ctax'), Mx.y.ctax, 1);
+eq('整合：固定費', tot('fx'), Mx.y.fix, 1);
+eq('整合：人件費', tot('staff'), Mx.y.staff, 1);
+eq('整合：税引前所得', Y2.profit, Mx.y.pre, 1);
+eq('整合：所得税等', Y2.tax, Mx.y.tax, 1);
+eq('整合：手残り＝年間の収支', tot('net'), Mx.y.left, 1);
+eq('整合：運転資金の月額＝資金繰り表1か月目の支出', C.month1, C.rows[0].out - C.rows[0].init, 1e-6);
+eq('整合：運転資金に変動費と返済が入る', C.month1, 85290 + 30000 + 412000 + 300000 + 40000 + C.loanPay, 1e-6);
+eq('整合：必要な手元資金', C.required, 211600 + 6 * C.month1, 1e-6);
+// 見積タブの損益分岐：税金・変動費なしなら引き継ぎ資料と一致、ありなら結果タブと一致
+[[20000, 8, 23], [30000, 5, 15], [40000, 4, 12], [50000, 3, 9]].forEach(([p, a, b]) => {
+  eq(`損益分岐 税なし ${p} 税引前`, needClients(base(), { price: p }), a);
+  eq(`損益分岐 税なし ${p} 手残り`, needClients(base(), { price: p, living: true }), b); });
+const St = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; });
+eq('損益分岐 税あり 3万円＝結果タブの必要件数', needClients(St, { price: 30000, living: true }), needClients(St, { living: true }));
+eq('損益分岐 実効単価4.5万円', needClients(base(), { price: 45000, living: true }), needClients(base(S => { S.sim.kessan = 180000; }), { living: true, annual: true }));
+
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;
 const M = migrate(JSON.parse(JSON.stringify(old)));

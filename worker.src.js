@@ -113,7 +113,8 @@ async function savePlan(env, plan) {
 
 function results(C, plan) {
   const last = C.rows[C.N - 1], s = plan.sim;
-  const be = fixed => Object.fromEntries([20000, 30000, 40000, 50000, round(C.price)].map(p => [p, { fixed_only: need(fixed, p), with_living: need(fixed + s.living + s.kokuho, p) }]));
+  // 単価ごとの必要件数。変動費・消費税・所得税等を含む、画面と同じ計算
+  const be = staff => Object.fromEntries([20000, 30000, 40000, 50000, round(C.price)].map(p => [p, { income_before_tax_in_black: needClients(plan, { staff, price: p }), cash_left_positive_after_living_and_tax: needClients(plan, { staff, price: p, living: true }) }]));
   return {
     opening_month: C.open, months_until_opening: C.preN,
     opening_cost: round(C.openCost),
@@ -133,7 +134,7 @@ function results(C, plan) {
     capacity_reached_month: C.capM || null,
     taxes_total: { consumption: round(C.ctaxT), income_resident_business: round(C.itaxT) },
     staff_monthly_cost_planned: round(C.staffMAll),
-    break_even_clients_by_price: { owner_only: be(C.fixedBase), with_planned_staff: be(C.fixedBase + C.staffMAll) },
+    break_even_clients_by_price: { owner_only: be(0), with_planned_staff: be(C.staffMAll) },
   };
 }
 function listOut(plan, name) {

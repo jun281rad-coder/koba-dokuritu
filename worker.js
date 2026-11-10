@@ -128,12 +128,13 @@ function annualTax(S,inc,mon){
 function monthlyAt(S,n,o){
   o=o||{};
   var fixed=sum(S.fixed,function(x){return x.amt}),staff=o.staff||0,c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
-  var fee=n*S.sim.fee,kessanY=n*S.sim.kessan,salesY=fee*12+kessanY,varM=n*(S.sim.varCost||0);
+  var unit=o.price!=null?o.price:S.sim.fee,kes=o.price!=null?0:S.sim.kessan;   // o.price: 決算料込みの実効単価で計算する
+  var fee=n*unit,kessanY=n*kes,salesY=fee*12+kessanY,varM=n*(S.sim.varCost||0);
   var biz=fee*(1-c)-varM-fixed-staff;                              // 税引前所得（月・決算料を除く）
   var preY=biz*12+kessanY*(1-c);                                   // 税引前所得（年）
   var taxY=annualTax(S,preY,12),loanM=loanPayment(S);
   var left=biz-taxY/12-S.sim.living-S.sim.kokuho-loanM;
-  var avg=S.sim.kessanMode==='avg',k=avg?kessanY/12:0;             // 決算料を月に均す設定なら、月間にも月割で入れる
+  var avg=S.sim.kessanMode==='avg'||o.price!=null,k=avg?kessanY/12:0;             // 決算料を月に均す設定なら、月間にも月割で入れる
   var y={sales:salesY,kessan:kessanY,varc:varM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
     living:S.sim.living*12,kokuho:S.sim.kokuho*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
   var mm={sales:fee+k,kessan:avg?k:null,varc:varM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
@@ -146,8 +147,8 @@ function monthlyAt(S,n,o){
    o.annual: 決算料も含めた年間の合計で見るか。決算料を月に均す設定のときは、常に年間で見る */
 function needClients(S,o){
   o=o||{};
-  if(!(S.sim.fee>0)) return null;
-  var byYear=o.annual||S.sim.kessanMode==='avg';
+  if(!((o.price!=null?o.price:S.sim.fee)>0)) return null;
+  var byYear=o.annual||S.sim.kessanMode==='avg'||o.price!=null;
   for(var n=1;n<=3000;n++){
     var M=monthlyAt(S,n,o),v=o.living?(byYear?M.annual:M.left):(byYear?M.bizAnnual:M.biz);
     if(v>=0) return n;
@@ -224,11 +225,11 @@ function calcPlan(S,now,o){
     if(r.red) lastRed=r.m; else if(!firstBlack) firstBlack=r.m;
     if(!firstBiz&&basis-r.fx-r.vr-r.staff-r.ctax>=0) firstBiz=r.m;
   });
-  var fixed1=fixedAt(1),month1=fixed1+staffM(1)+S.sim.living+S.sim.kokuho;
+  var fixed1=fixedAt(1),month1=rows[0].out-rows[0].init;      // 固定費＋変動費＋人件費＋生活費＋国保年金＋返済
   var required=openCost+staffI(1)+month1*S.sim.buffer;
   return {now:now,open:open,preN:preN,pre:pre,accM:accM,accB:accB,accC:accC,projected:projected,funds:funds,openCost:openCost,
     fixedBase:fixedBase,fixed1:fixed1,loan:loan,loanPay:loanPay,price:price,rows:rows,years:years,ctaxT:ctaxT,itaxT:itaxT,b0:b0,minBal:minBal,minM:minM,firstBlack:firstBlack,firstBiz:firstBiz,stableM:lastRed<N?lastRed+1:0,
-    capM:capM,capEnd:capAt(N),month1:month1,staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
+    capM:capM,capEnd:capAt(N),month1:month1,var1:rows[0].vr,loan1:(loan>0?loanPay:0),staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
 }
 
 
@@ -334,7 +335,8 @@ async function savePlan(env, plan) {
 
 function results(C, plan) {
   const last = C.rows[C.N - 1], s = plan.sim;
-  const be = fixed => Object.fromEntries([20000, 30000, 40000, 50000, round(C.price)].map(p => [p, { fixed_only: need(fixed, p), with_living: need(fixed + s.living + s.kokuho, p) }]));
+  // 単価ごとの必要件数。変動費・消費税・所得税等を含む、画面と同じ計算
+  const be = staff => Object.fromEntries([20000, 30000, 40000, 50000, round(C.price)].map(p => [p, { income_before_tax_in_black: needClients(plan, { staff, price: p }), cash_left_positive_after_living_and_tax: needClients(plan, { staff, price: p, living: true }) }]));
   return {
     opening_month: C.open, months_until_opening: C.preN,
     opening_cost: round(C.openCost),
@@ -354,7 +356,7 @@ function results(C, plan) {
     capacity_reached_month: C.capM || null,
     taxes_total: { consumption: round(C.ctaxT), income_resident_business: round(C.itaxT) },
     staff_monthly_cost_planned: round(C.staffMAll),
-    break_even_clients_by_price: { owner_only: be(C.fixedBase), with_planned_staff: be(C.fixedBase + C.staffMAll) },
+    break_even_clients_by_price: { owner_only: be(0), with_planned_staff: be(C.staffMAll) },
   };
 }
 function listOut(plan, name) {

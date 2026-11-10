@@ -3,8 +3,8 @@
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/app.html', 'utf8');
 const block = src.slice(src.indexOf('/*CALC-START*/'), src.indexOf('/*CALC-END*/'));
-const { defaults, calcPlan, need, incomeTax, ymAdd, migrate } =
-  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate};')();
+const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients } =
+  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients};')();
 
 let pass = 0, fail = 0;
 function eq(name, got, want, tol = 0.5) {
@@ -122,6 +122,28 @@ eq('登録申請から遅れる：学費は変わらない', D2.accC, 1600000);
 const D3 = calcPlan(S0, NOW, { slip: { from: NOW, months: 24, cost: 600000 } });
 eq('2年遅れ・追加支出あり：開業月', D3.open, '2033-04');
 eq('2年遅れ・追加支出あり：見込み資金', D3.projected, 2950000 + 24 * 50000 + 400000 - 600000);
+
+// --- 黒字が続くのに必要な顧問先数 ---
+let Sn = base();                                       // 税金なし：資料の損益分岐と同じになる
+eq('必要件数 事業のみ', needClients(Sn, {}), 5);
+eq('必要件数 生活費込み', needClients(Sn, { living: true }), 15);
+eq('必要件数 2人 生活費込み', needClients(Sn, { staff: 412000, living: true }), 29);
+Sn = base(S => { S.sim.ctaxOn = true; });              // 消費税4.5%：140,217 ÷ (30,000×0.955) = 4.89 → 5件
+eq('必要件数 消費税あり 事業のみ', needClients(Sn, {}), 5);
+eq('必要件数 消費税あり 生活費込み', needClients(Sn, { living: true }), 16);   // 440,217 ÷ 28,650 = 15.37
+Sn = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; });
+const nT = needClients(Sn, { living: true });
+// 手計算の確認：n件のとき 月の手残り ＝ 28,650n − 440,217 − 税額/12 が初めて0以上になる
+const left = n => { const rev = n * 360000, ct = rev * 0.045, inc = rev - ct - 140217 * 12, tx = inc - 1230000;
+  const tax = incomeTax(tx) + Math.max(0, tx + 150000) * 0.10 + Math.max(0, inc - 2900000) * 0.05; return n * 28650 - 440217 - tax / 12; };
+eq('必要件数 税金込み：その件数で黒字', left(nT) >= 0, true);
+eq('必要件数 税金込み：1件少ないと赤字', left(nT - 1) < 0, true);
+Sn = base(S => { S.sim.kessan = 180000; });            // 決算料あり・一括：毎月で見ると顧問料だけ、年間で見ると実効4.5万円
+eq('必要件数 決算料一括 毎月', needClients(Sn, { living: true }), 15);
+eq('必要件数 決算料一括 年間', needClients(Sn, { living: true, annual: true }), 10);   // 440,217 ÷ 45,000 = 9.78
+C = calcPlan(base(), NOW);
+eq('黒字が続き始める月（税金なし）', C.stableM, 9);     // 9か月目：13件×3万＝39万 ≥ 38.5万。13か月目以降も 17件×3万＝51万 ≥ 44万
+eq('1〜8か月目は赤字', C.rows.slice(0, 8).every(r => r.red), true);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

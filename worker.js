@@ -109,6 +109,33 @@ function incomeTax(t){
   var B=[[1949000,.05,0],[3299000,.10,97500],[6949000,.20,427500],[8999000,.23,636000],[17999000,.33,1536000],[39999000,.40,2796000],[Infinity,.45,4796000]];
   for(var i=0;i<B.length;i++) if(t<=B[i][0]) return (t*B[i][1]-B[i][2])*1.021;
 }
+function loanPayment(S){
+  var loan=Math.max(0,S.sim.loan),n=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200;
+  return loan>0?(r>0?loan*r/(1-Math.pow(1+r,-n)):loan/n):0;
+}
+/* 所得税＋住民税＋個人事業税の概算。inc=青色申告特別控除前の事業の利益、mon=その年に事業をした月数 */
+function annualTax(S,inc,mon){
+  if(!S.sim.itaxOn||inc<=0) return 0;
+  var taxable=inc-650000-S.sim.deduct-S.sim.kokuho*mon;
+  return incomeTax(taxable)+Math.max(0,taxable+150000)*0.10+Math.max(0,inc-2900000*mon/12)*0.05;
+}
+/* 黒字が続くのに必要な顧問先数（2年目以降の固定費で計算）。
+   o.staff: 人件費の月額／o.living: 生活費・国保年金・返済・所得税等まで賄うか／o.annual: 年間の合計で見るか（決算料込み）
+   o.annual でないときは、決算料が入らない月でも収支がプラスになる件数（決算料を月に均す設定なら月割込み） */
+function needClients(S,o){
+  o=o||{};
+  var fixed=sum(S.fixed,function(x){return x.amt})+(o.staff||0),c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
+  var outM=fixed+(o.living?S.sim.living+S.sim.kokuho+loanPayment(S):0),lump=S.sim.kessanMode!=='avg';
+  if(!(S.sim.fee>0)) return null;
+  for(var n=1;n<=3000;n++){
+    var rev=n*S.sim.fee*12+n*S.sim.kessan,ctax=rev*c;
+    var tax=o.living?annualTax(S,rev-ctax-fixed*12,12):0;
+    var annual=rev-ctax-outM*12-tax;
+    var monthly=(lump&&!o.annual)?n*S.sim.fee*(1-c)-outM-tax/12:annual/12;
+    if(monthly>=0) return n;
+  }
+  return null;
+}
 /* o.staff: 採用する人員を差し替える（比較用）／o.slip:{from:'YYYY-MM',months:n,cost:円} その月以降の未完了の節目を遅らせ、追加支出を引く */
 function calcPlan(S,now,o){
   o=o||{};
@@ -130,8 +157,7 @@ function calcPlan(S,now,o){
   var funds=S.sim.autoFunds?projected:S.sim.funds;
   var openCost=sum(S.openCosts,function(x){return x.amt});
   var fixedBase=sum(S.fixed,function(x){return x.amt});
-  var loan=Math.max(0,S.sim.loan),nPay=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200;
-  var loanPay=loan>0?(r>0?loan*r/(1-Math.pow(1+r,-nPay)):loan/nPay):0;
+  var loan=Math.max(0,S.sim.loan),nPay=Math.max(1,Math.round(S.sim.loanYears*12)),loanPay=loanPayment(S);
   var staffOn=o.staff||S.staff.filter(function(s){return s.on});
   var staffM=function(m){return sum(staffOn,function(s){return s.start<=m?s.monthly:0})};
   var staffI=function(m){return sum(staffOn,function(s){return s.start===m?s.init:0})};
@@ -167,26 +193,23 @@ function calcPlan(S,now,o){
     var f=partialEnd?12/Y.n:1,inc=Y.profit*f+carry;
     if(inc<0){carry=inc;Y.tax=0;return}
     carry=0;
-    if(!S.sim.itaxOn) return;
-    var mon=partialEnd?12:Y.n;
-    var taxable=inc-650000-S.sim.deduct-S.sim.kokuho*mon;
-    var t=incomeTax(taxable)+Math.max(0,taxable+150000)*0.10+Math.max(0,inc-2900000*mon/12)*0.05;
-    Y.tax=t/f;
+    Y.tax=annualTax(S,inc,partialEnd?12:Y.n)/f;
     Y.rows.forEach(function(r){r.itax=Y.tax/Y.n});
   });
   // 3) 残高
-  var b=funds+loan-openCost,b0=b,minBal=b0,minM=0,firstBlack=0,firstBiz=0,ctaxT=0,itaxT=0;
+  var b=funds+loan-openCost,b0=b,minBal=b0,minM=0,firstBlack=0,firstBiz=0,lastRed=0,ctaxT=0,itaxT=0;
   rows.forEach(function(r){
     r.tax=r.ctax+r.itax; r.net=r.rev-r.out-r.tax; b+=r.net; r.bal=b; ctaxT+=r.ctax; itaxT+=r.itax;
     if(b<minBal){minBal=b;minM=r.m}
     var basis=lump?r.fee:r.revA;
-    if(!firstBlack&&basis-(r.out-r.init)-r.tax>=0) firstBlack=r.m;
+    r.red=basis-(r.out-r.init)-r.tax<0;          // 決算料の一括入金と採用時の初期費用を除いて赤字か
+    if(r.red) lastRed=r.m; else if(!firstBlack) firstBlack=r.m;
     if(!firstBiz&&basis-r.fx-r.staff-r.ctax>=0) firstBiz=r.m;
   });
   var fixed1=fixedAt(1),month1=fixed1+staffM(1)+S.sim.living+S.sim.kokuho;
   var required=openCost+staffI(1)+month1*S.sim.buffer;
   return {now:now,open:open,preN:preN,pre:pre,accM:accM,accB:accB,accC:accC,projected:projected,funds:funds,openCost:openCost,
-    fixedBase:fixedBase,fixed1:fixed1,loan:loan,loanPay:loanPay,price:price,rows:rows,years:years,ctaxT:ctaxT,itaxT:itaxT,b0:b0,minBal:minBal,minM:minM,firstBlack:firstBlack,firstBiz:firstBiz,
+    fixedBase:fixedBase,fixed1:fixed1,loan:loan,loanPay:loanPay,price:price,rows:rows,years:years,ctaxT:ctaxT,itaxT:itaxT,b0:b0,minBal:minBal,minM:minM,firstBlack:firstBlack,firstBiz:firstBiz,stableM:lastRed<N?lastRed+1:0,
     capM:capM,capEnd:capAt(N),month1:month1,staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
 }
 
@@ -301,6 +324,9 @@ function results(C, plan) {
     projected_funds_at_opening: round(C.funds + C.loan), surplus_or_shortage: round(C.gap),
     balance_right_after_opening: round(C.b0),
     effective_monthly_price: round(C.price),
+    clients_needed_for_cash_to_grow_every_month: { owner_only: needClients(plan, { living: true }), with_planned_staff: needClients(plan, { staff: C.staffMAll, living: true }), note: '生活費・税金込み。2年目以降の固定費で計算' },
+    clients_needed_for_business_in_black: { owner_only: needClients(plan, {}), with_planned_staff: needClients(plan, { staff: C.staffMAll }) },
+    month_black_becomes_stable: C.stableM || null,
     first_month_in_black_incl_living_and_tax: C.firstBlack || null,
     first_month_business_in_black: C.firstBiz || null,
     lowest_balance: { amount: round(C.minBal), month_after_opening: C.minM },

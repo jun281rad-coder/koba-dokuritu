@@ -133,7 +133,12 @@ function monthlyAt(S,n,o){
   var preY=biz*12+kessanY*(1-c);                                   // 税引前所得（年）
   var taxY=annualTax(S,preY,12),loanM=loanPayment(S);
   var left=biz-taxY/12-S.sim.living-S.sim.kokuho-loanM;
-  return {n:n,fee:fee,kessanY:kessanY,salesY:salesY,varM:varM,ctax:fee*c,ctaxY:salesY*c,fixed:fixed,staff:staff,
+  var avg=S.sim.kessanMode==='avg',k=avg?kessanY/12:0;             // 決算料を月に均す設定なら、月間にも月割で入れる
+  var y={sales:salesY,kessan:kessanY,varc:varM*12,ctax:salesY*c,fix:fixed*12,staff:staff*12,pre:preY,tax:taxY,after:preY-taxY,
+    living:S.sim.living*12,kokuho:S.sim.kokuho*12,loan:loanM*12,left:left*12+kessanY*(1-c)};
+  var mm={sales:fee+k,kessan:avg?k:null,varc:varM,ctax:(fee+k)*c,fix:fixed,staff:staff,pre:biz+k*(1-c),tax:taxY/12,after:biz+k*(1-c)-taxY/12,
+    living:S.sim.living,kokuho:S.sim.kokuho,loan:loanM,left:left+k*(1-c)};
+  return {m:mm,y:y,n:n,fee:fee,kessanY:kessanY,salesY:salesY,varM:varM,ctax:fee*c,ctaxY:salesY*c,fixed:fixed,staff:staff,
     biz:biz,preY:preY,bizAnnual:preY,tax:taxY/12,taxY:taxY,afterM:biz-taxY/12,afterY:preY-taxY,
     living:S.sim.living,kokuho:S.sim.kokuho,loan:loanM,left:left,kessanNet:kessanY*(1-c),annual:left*12+kessanY*(1-c)};
 }

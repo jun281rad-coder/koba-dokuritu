@@ -178,6 +178,22 @@ C = calcPlan(base(S => { S.sim.varCost = 1000; }), NOW);
 eq('変動費が支出に入る', C.rows[0].out, 385290 + 5000);
 eq('変動費が税引前所得から引かれる', C.years[0].profit, 2430000 - 85290 * 9 - 81000 - 1233900);
 
+// --- 月間と年間の損益がそろっていること ---
+Mx = monthlyAt(Sp, 20, { staff: 100000 });            // 決算料は一括：月間は決算料を除く
+eq('月間 売上', Mx.m.sales, 600000);
+eq('月間 税引前所得', Mx.m.pre, Mx.biz, 1e-6);
+eq('年間 税引前所得', Mx.y.pre, Mx.preY, 1e-6);
+eq('年間＝月間×12＋決算料（税引前）', Mx.m.pre * 12 + Mx.kessanNet, Mx.y.pre, 1e-6);
+eq('年間＝月間×12＋決算料（手残り）', Mx.m.left * 12 + Mx.kessanNet, Mx.y.left, 1e-6);
+eq('月間の税額は年額の12分の1', Mx.m.tax * 12, Mx.y.tax, 1e-6);
+['m', 'y'].forEach(k => { const v = Mx[k];
+  eq(k + ' 税引前＝売上−変動費−固定費', v.sales - v.varc - v.ctax - v.fix - v.staff, v.pre, 1e-6);
+  eq(k + ' 税引後＝税引前−税', v.pre - v.tax, v.after, 1e-6);
+  eq(k + ' 手残り＝税引後−生活費等', v.after - v.living - v.kokuho - v.loan, v.left, 1e-6); });
+const Sa = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; S.sim.kessan = 180000; S.sim.kessanMode = 'avg'; });
+Mx = monthlyAt(Sa, 20, {});                            // 決算料を月に均す：月間は年間の12分の1
+['sales', 'ctax', 'pre', 'after', 'left'].forEach(k => eq('月割 ' + k, Mx.m[k] * 12, Mx.y[k], 1e-6));
+
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;
 const M = migrate(JSON.parse(JSON.stringify(old)));

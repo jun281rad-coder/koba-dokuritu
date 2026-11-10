@@ -1,0 +1,657 @@
+<title>独立ロードマップ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* 帳簿と見積書の体裁。1カラム、罫線で区切る表が主役。色は「黒字＝帳簿の緑」「赤字＝赤・△」だけに意味を持たせる */
+:root{
+  --bg:#f2f5f4; --surface:#ffffff; --ink:#13262a; --muted:#5a6d72; --line:#d3dcda; --rule:#13262a;
+  --accent:#0a6a5a; --accent-soft:#dfeeea; --red:#bf2d28; --red-soft:#fbe9e7; --amber:#8f5b00;
+  --text:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+  --num:"IBM Plex Mono","SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1617; --surface:#162123; --ink:#e5eeec; --muted:#93a5a6; --line:#2a3a3c; --rule:#93a5a6;
+  --accent:#55c7b2; --accent-soft:#15322e; --red:#ff7d73; --red-soft:#3a1b19; --amber:#e2ad4f; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0e1617; --surface:#162123; --ink:#e5eeec; --muted:#93a5a6; --line:#2a3a3c; --rule:#93a5a6;
+  --accent:#55c7b2; --accent-soft:#15322e; --red:#ff7d73; --red-soft:#3a1b19; --amber:#e2ad4f; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--text);font-size:15px;line-height:1.6;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding-block:14px 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px}
+header.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid var(--rule);padding-bottom:8px}
+header.top h1{font-size:19px;font-weight:700;margin:0;letter-spacing:.04em}
+#sync{font-size:11px;color:var(--muted);text-align:right}
+section{display:flex;flex-direction:column;gap:10px;min-width:0}
+h2{font-size:15px;font-weight:700;margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:1px solid var(--rule);padding-bottom:4px}
+h2 small{font-weight:400;font-size:11px;color:var(--muted)}
+h3{font-size:12px;font-weight:700;margin:0;color:var(--muted);letter-spacing:.08em}
+p{margin:0}
+.note{font-size:12px;color:var(--muted)}
+.warn{font-size:12px;color:var(--amber)}
+.neg{color:var(--red)}
+.pos{color:var(--accent)}
+.n{font-family:var(--num);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* 表 */
+.scroll{overflow-x:auto;min-width:0;background:var(--surface);border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+tr:last-child>td,tr:last-child>th{border-bottom:0}
+thead th{font-size:11px;font-weight:500;color:var(--muted);background:var(--bg);white-space:nowrap}
+td.r,th.r{text-align:right}
+td.n{font-size:13px}
+tr.sub td{font-weight:700;background:var(--bg)}
+tr.total td{font-weight:700;border-top:2px solid var(--rule);font-size:14px}
+tr.grp td{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;padding-top:10px;padding-bottom:3px}
+tr.tap{cursor:pointer}
+tr.tap:active{background:var(--accent-soft)}
+td button{white-space:nowrap;padding:6px 9px}
+td.n,th.r{white-space:nowrap}
+td .memo{display:block;font-size:11px;color:var(--muted);line-height:1.4}
+table.kv th{font-weight:400;color:var(--muted);width:42%;font-size:12px}
+table.kv td{text-align:right}
+table.kv td small{display:block;font-size:11px;color:var(--muted);font-family:var(--text)}
+table.mon td,table.mon th{padding:5px 6px;text-align:right;font-size:12px}
+table.mon td:first-child,table.mon th:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
+table.mon thead th:first-child{background:var(--bg)}
+tr.redrow td{background:var(--red-soft)}
+tr.mark td{border-top:2px solid var(--accent)}
+
+/* 入力 */
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.form .full{grid-column:1/-1}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+label.f span.h{font-size:11px;line-height:1.35}
+.inp{display:flex;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:4px;min-width:0}
+.inp:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.inp input,.inp select,.inp textarea{flex:1;min-width:0;width:100%;border:0;background:transparent;color:var(--ink);font:500 16px var(--num);padding:9px 8px;text-align:right;outline:0}
+.inp input[type=text].t,.inp input[type=month],.inp select,.inp textarea{font-family:var(--text);text-align:left}
+.inp i{font-style:normal;font-size:12px;color:var(--muted);padding-right:8px;white-space:nowrap}
+label.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink)}
+label.chk input{width:20px;height:20px;accent-color:var(--accent)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:500 13px var(--text);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:9px 12px;cursor:pointer}
+button:focus-visible,tr.tap:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.pri{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:700}
+button.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:700}
+button.danger{color:var(--red)}
+button.add{align-self:flex-start;border-style:dashed;color:var(--muted)}
+
+/* 道のり */
+ol.tl{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line)}
+ol.tl li{display:grid;grid-template-columns:34px 1fr;border-bottom:1px solid var(--line);position:relative}
+ol.tl li:last-child{border-bottom:0}
+ol.tl li::before{content:"";position:absolute;left:16px;top:0;bottom:0;width:2px;background:var(--line)}
+ol.tl li.done::before{background:var(--accent)}
+.dot{position:relative;z-index:1;width:22px;height:22px;margin:11px 0 0 6px;border-radius:50%;border:2px solid var(--muted);background:var(--surface);padding:0;display:grid;place-items:center;font-size:12px;line-height:1;color:var(--surface)}
+li.done .dot{background:var(--accent);border-color:var(--accent)}
+li.next .dot{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+li.calc .dot{border-style:dashed;width:14px;height:14px;margin:15px 0 0 10px}
+li.open .dot{border-radius:3px;border-color:var(--ink)}
+.tlb{padding:8px 10px 9px 4px;min-width:0;cursor:pointer;display:flex;flex-direction:column;gap:1px}
+.tlb .when{font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.tlb .what{font-weight:500;font-size:14px;overflow-wrap:anywhere}
+li.done .what{color:var(--muted);text-decoration:line-through}
+li.open .what{font-weight:700;font-size:16px}
+li.calc .what{font-weight:400;font-size:13px}
+li.late .when b{color:var(--red)}
+.tlb .memo{font-size:11px;color:var(--muted);line-height:1.45}
+
+/* グラフ */
+.chart{background:var(--surface);border:1px solid var(--line);padding:6px 4px 2px}
+.chart svg{display:block;width:100%;height:auto;touch-action:pan-y}
+.chart text{font:10px var(--num);fill:var(--muted)}
+#readout{font-size:12px;color:var(--muted);min-height:1.6em}
+
+/* タブ */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px);padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
+nav.tabs a{flex:1;max-width:180px;text-align:center;padding:10px 2px 9px;font-size:12px;color:var(--muted);text-decoration:none;border-top:3px solid transparent;margin-top:-1px}
+nav.tabs a b{display:block;font-size:14px;font-weight:700}
+nav.tabs a.cur{color:var(--accent);border-top-color:var(--accent)}
+
+/* 編集シート */
+#sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+#sheet .box{background:var(--bg);width:100%;max-width:720px;max-height:88%;overflow-y:auto;border-top:3px solid var(--accent);padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:12px}
+#sheet h2{border:0;padding:0}
+#sheet .inp textarea{font-size:13px;min-height:160px;resize:vertical}
+@media (prefers-reduced-motion:no-preference){ #sheet .box{animation:up .18s ease-out} @keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}} }
+@media (min-width:560px){ .form.w3{grid-template-columns:1fr 1fr 1fr} }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>独立ロードマップ</h1>
+    <div id="sync">この端末に保存</div>
+  </header>
+  <main id="main" style="display:flex;flex-direction:column;gap:22px;min-width:0"></main>
+</div>
+<nav class="tabs" id="tabs" aria-label="画面の切り替え">
+  <a href="#roadmap" data-tab="roadmap"><b>道のり</b>全体像</a>
+  <a href="#funds" data-tab="funds"><b>資金</b>開業まで</a>
+  <a href="#estimate" data-tab="estimate"><b>見積</b>費用の明細</a>
+  <a href="#after" data-tab="after"><b>開業後</b>試算表</a>
+</nav>
+<div id="sheet" hidden></div>
+
+<script>
+(function(){
+'use strict';
+var KEY='dokuritsu-roadmap-v1';
+var $=function(s,r){return (r||document).querySelector(s)};
+var uid=function(){return Math.random().toString(36).slice(2,9)};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var nowYm=function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')};
+var okYm=function(s){return /^\d{4}-(0[1-9]|1[0-2])$/.test(s||'')};
+var ymN=function(ym){return (+ym.slice(0,4))*12+(+ym.slice(5,7))-1};
+var nYm=function(n){return Math.floor(n/12)+'-'+String(n%12+1).padStart(2,'0')};
+var ymAdd=function(ym,k){return nYm(ymN(ym)+k)};
+var ymDiff=function(a,b){return ymN(b)-ymN(a)};
+var ymL=function(ym){return (+ym.slice(0,4))+'年'+(+ym.slice(5,7))+'月'};
+var dur=function(n){n=Math.abs(n);var y=Math.floor(n/12),m=n%12;return (y?y+'年':'')+((m||!y)?m+'か月':'')};
+var yen=function(n){n=Math.round(n);return (n<0?'△':'')+Math.abs(n).toLocaleString('ja-JP')};
+var sen=function(n){return yen(n/1000)};
+var cls=function(n){return n<0?' neg':''};
+var toNum=function(s){var v=parseFloat(String(s).replace(/[,，\s円]/g,'').replace(/[０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-65248)}).replace(/^△/,'-'));return isFinite(v)?v:0};
+
+/* ---------- 初期値（引き継ぎ資料の数字） ---------- */
+function defaults(){
+  var oc=function(g,label,amt,note){return {id:uid(),g:g,label:label,amt:amt,note:note||''}};
+  var fx=function(g,label,amt,note){return {id:uid(),g:g,label:label,amt:amt,note:note||''}};
+  var ms=function(label,ym,cost,note,kind){return {id:uid(),label:label,ym:ym,done:false,cost:cost||0,note:note||'',kind:kind||''}};
+  return {v:1,updatedAt:0,
+    pre:{savings:1000000,monthly:50000,bonus:200000},
+    ms:[
+      ms('簿記論 合格','2027-12',0,'合格発表の月を入れる'),
+      ms('財務諸表論 合格','2027-12',0,''),
+      ms('大学院 入学（入学金・1年目学費）','2028-04',900000,'学費は仮置き。志望校の募集要項で置き換える'),
+      ms('大学院 2年目学費','2029-04',700000,'仮置き'),
+      ms('税法1科目 合格','2029-12',0,'大学院（修士論文）で免除されるのは税法3科目のうち2科目まで。残り1科目は試験合格が必要'),
+      ms('修士論文 提出・大学院修了','2030-03',0,''),
+      ms('国税審議会の免除認定','2030-09',0,'修了後に申請。時期は仮置き'),
+      ms('退職の意思表示・引継ぎ開始','2030-10',0,''),
+      ms('税理士登録 申請','2030-11',0,'申請から登録まで数か月かかる前提'),
+      ms('税理士登録 完了','2031-03',0,'実務経験2年以上の要件は勤務4年目で充足見込み'),
+      ms('開業','2031-04',0,'自宅開業・札幌','open')
+    ],
+    openCosts:[
+      oc('登録関係','登録免許税',60000),
+      oc('登録関係','登録手数料',70000,'2027年4月以降の払込みは70,000円（引継ぎ資料は改定前の50,000円）'),
+      oc('登録関係','北海道税理士会 入会金',40000),
+      oc('登録関係','本会会費（年額）',95000),
+      oc('登録関係','支部会費（年額）',60000,'公式非公開のため仮置き'),
+      oc('登録関係','会館建設費等',30000,'公式非公開のため仮置き'),
+      oc('保険','税理士職業賠償責任保険',50040,'個人・2型＋事前特約'),
+      oc('機器','PC',150000,'機器合計 約249,000円の内訳は仮置き'),
+      oc('機器','ScanSnap iX2500',59400,'買い切り'),
+      oc('機器','モニタ・周辺機器',39600,'仮置き'),
+      oc('ソフトウェア初年度','達人シリーズ 最小実務セット',262020),
+      oc('ソフトウェア初年度','弥生PAP 年会費',105600),
+      oc('ソフトウェア初年度','税務通信（データベース付き）',52800),
+      oc('ソフトウェア初年度','Google Workspace Business Standard',21120),
+      oc('ソフトウェア初年度','セキュリティ',12540),
+      oc('その他','HP・名刺・挨拶状等',95780),
+      oc('その他','自宅整備',30000)
+    ],
+    fixed:[
+      fx('システム代','達人シリーズ',21835),
+      fx('システム代','弥生PAP',8800),
+      fx('システム代','Claude Max',15800,'月100ドル・1ドル=158円換算。月払いのみ'),
+      fx('システム代','Google Workspace',1760),
+      fx('システム代','税務通信',4400),
+      fx('システム代','セキュリティ',1045),
+      fx('システム代','集金代行手数料',5000,'口座振替・リコーリース想定'),
+      fx('その他雑費','本会会費',7917,'年95,000円の月割'),
+      fx('その他雑費','支部会費',5000,'仮置き'),
+      fx('その他雑費','税賠保険',4170),
+      fx('その他雑費','通信費',8000),
+      fx('その他雑費','自宅按分',15000),
+      fx('その他雑費','HP保守',6490),
+      fx('その他雑費','書籍・消耗品',5000),
+      fx('その他雑費','集客費',30000,'紹介中心＋成果報酬型サイト')
+    ],
+    staff:[
+      {id:uid(),label:'パート（記帳＋総務兼務）',on:false,start:7,monthly:100000,init:180000,note:'月額は仮置き（給与＋ツール約1万円）'},
+      {id:uid(),label:'ベテラン社員',on:false,start:13,monthly:412000,init:211600,note:'月給30万＋賞与月割5万＋社保52,500＋ツール9,500。初期はPC等18万＋Claude Pro年払い'},
+      {id:uid(),label:'パート（総務専任）',on:false,start:25,monthly:100000,init:180000,note:'月額は仮置き'},
+      {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,monthly:50000,init:0,note:'月額は仮置き。調査立会いはOB本人の税理士登録が前提'}
+    ],
+    sim:{clients:5,growth:1,fee:30000,kessan:0,living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5}
+  };
+}
+function migrate(s){
+  var d=defaults(); if(!s||typeof s!=='object') return d;
+  ['pre','sim'].forEach(function(k){s[k]=Object.assign({},d[k],s[k]||{})});
+  ['ms','openCosts','fixed','staff'].forEach(function(k){if(!Array.isArray(s[k])) s[k]=d[k]});
+  if(!s.ms.some(function(m){return m.kind==='open'})) s.ms.push(d.ms[d.ms.length-1]);
+  s.ms.forEach(function(m){if(!okYm(m.ym)) m.ym=nowYm()});
+  s.updatedAt=s.updatedAt||0; s.v=1; return s;
+}
+var state;
+try{state=migrate(JSON.parse(localStorage.getItem(KEY)))}catch(e){state=defaults()}
+
+/* ---------- 保存（端末＋クラウド） ---------- */
+var docRef=null,pushT=null;
+function setSync(t){$('#sync').textContent=t}
+function save(){
+  state.updatedAt=Date.now();
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+  if(docRef){setSync('保存中…');clearTimeout(pushT);pushT=setTimeout(push,1200)}
+}
+function push(){
+  if(!docRef) return;
+  docRef.set({json:JSON.stringify(state),updatedAt:state.updatedAt}).then(function(){setSync('クラウドに保存済み')},function(){setSync('この端末に保存（クラウド保存に失敗）')});
+}
+function initCloud(){
+  var c=window.claude; if(!c||!c.use) return;
+  Promise.all([c.use('db'),c.use('user')]).then(function(r){
+    var db=r[0],user=r[1]; if(!db||!user) return;
+    return user.id().then(function(id){
+      if(!id) return;
+      var ref=db.collection('data/users/'+id).doc('plan');
+      return ref.get().then(function(snap){
+        docRef=ref;
+        var d=snap.exists?snap.data():null;
+        if(d&&d.json&&(d.updatedAt||0)>state.updatedAt){
+          state=migrate(JSON.parse(d.json));
+          try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+          render(); setSync('クラウドから読み込み済み');
+        }else if(state.updatedAt>0&&(!d||state.updatedAt>(d.updatedAt||0))){push()}
+        else setSync('クラウドに保存済み');
+      });
+    });
+  }).catch(function(){});
+}
+
+/* ---------- 計算 ---------- */
+var sum=function(a,f){return a.reduce(function(t,x){return t+(f(x)||0)},0)};
+function openMs(){return state.ms.filter(function(m){return m.kind==='open'})[0]}
+function calc(){
+  var S=state,now=nowYm(),open=openMs().ym,preN=Math.max(0,ymDiff(now,open));
+  var bal=S.pre.savings,accM=0,accB=0,accC=0,pre=[];
+  var costAt=function(test){return sum(S.ms,function(m){return (!m.done&&m.kind!=='open'&&m.cost>0&&test(m.ym))?m.cost:0})};
+  var c0=costAt(function(ym){return ymN(ym)<=ymN(now)}); bal-=c0; accC+=c0;
+  pre.push({ym:now,bal:bal});
+  for(var i=1;i<=preN;i++){
+    var ym=ymAdd(now,i),mo=+ym.slice(5,7);
+    bal+=S.pre.monthly; accM+=S.pre.monthly;
+    if(mo===6||mo===12){bal+=S.pre.bonus/2;accB+=S.pre.bonus/2}
+    var c=costAt(function(y){return y===ym}); bal-=c; accC+=c;
+    pre.push({ym:ym,bal:bal});
+  }
+  var projected=bal;
+  var funds=S.sim.autoFunds?projected:S.sim.funds;
+  var openCost=sum(S.openCosts,function(x){return x.amt});
+  var fixedBase=sum(S.fixed,function(x){return x.amt});
+  var sys=sum(S.fixed,function(x){return x.g==='システム代'?x.amt:0});
+  var loan=Math.max(0,S.sim.loan),nPay=Math.max(1,Math.round(S.sim.loanYears*12)),r=S.sim.loanRate/1200;
+  var loanPay=loan>0?(r>0?loan*r/(1-Math.pow(1+r,-nPay)):loan/nPay):0;
+  var staffOn=S.staff.filter(function(s){return s.on});
+  var staffM=function(m){return sum(staffOn,function(s){return s.start<=m?s.monthly:0})};
+  var staffI=function(m){return sum(staffOn,function(s){return s.start===m?s.init:0})};
+  var price=S.sim.fee+S.sim.kessan/12;
+  var N=Math.max(1,Math.min(120,Math.round(S.sim.months)));
+  var b=funds+loan-openCost,b0=b,rows=[],minBal=b0,minM=0,firstBlack=0,firstBiz=0;
+  for(var m=1;m<=N;m++){
+    var cl=Math.max(0,S.sim.clients+S.sim.growth*(m-1));
+    var rev=cl*price,sm=staffM(m),si=staffI(m),lp=(loan>0&&m<=nPay)?loanPay:0;
+    var out=fixedBase+sm+si+S.sim.living+S.sim.kokuho+lp,net=rev-out;
+    b+=net;
+    rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,rev:rev,staff:sm,out:out,net:net,bal:b,biz:rev-fixedBase-sm,ratio:rev>0?sm/rev:0,hire:staffOn.filter(function(s){return s.start===m})});
+    if(b<minBal){minBal=b;minM=m}
+    if(!firstBlack&&net>=0) firstBlack=m;
+    if(!firstBiz&&rev-fixedBase-sm>=0) firstBiz=m;
+  }
+  var month1=fixedBase+staffM(1)+S.sim.living+S.sim.kokuho;
+  var required=openCost+staffI(1)+month1*S.sim.buffer;
+  return {now:now,open:open,preN:preN,pre:pre,accM:accM,accB:accB,accC:accC,projected:projected,funds:funds,openCost:openCost,
+    fixedBase:fixedBase,sys:sys,loan:loan,loanPay:loanPay,price:price,rows:rows,b0:b0,minBal:minBal,minM:minM,firstBlack:firstBlack,firstBiz:firstBiz,
+    month1:month1,staffInit1:staffI(1),staffM1:staffM(1),staffMAll:sum(staffOn,function(s){return s.monthly}),required:required,gap:funds+loan-required,N:N};
+}
+var need=function(fixed,price){return price>0?Math.ceil(fixed/price):0};
+
+/* ---------- 画面 ---------- */
+var tab='roadmap',TABS=['roadmap','funds','estimate','after'];
+function inp(path,label,opt){
+  opt=opt||{};
+  var v=path.split('.').reduce(function(o,k){return o[k]},state);
+  var id='i_'+path.replace('.','_');
+  return '<label class="f'+(opt.full?' full':'')+'" for="'+id+'">'+label+
+    '<span class="inp"><input id="'+id+'" data-b="'+path+'" data-t="'+(opt.t||'yen')+'" inputmode="'+(opt.t==='dec'?'decimal':'numeric')+'" value="'+(opt.t==='dec'?v:yen(v))+'" autocomplete="off"><i>'+(opt.u||'円')+'</i></span>'+
+    (opt.h?'<span class="h">'+opt.h+'</span>':'')+'</label>';
+}
+function render(){
+  TABS.forEach(function(t){$('#tabs [data-tab='+t+']').classList.toggle('cur',t===tab)});
+  $('#main').innerHTML=VIEW[tab]();
+  refresh();
+}
+function refresh(){
+  var C=calc();
+  document.querySelectorAll('[data-out]').forEach(function(el){el.innerHTML=OUT[el.dataset.out](C)});
+  var ch=$('#chart'); if(ch) drawChart(ch,C);
+}
+
+var VIEW={
+roadmap:function(){
+  return '<section><h2>現在地<small>'+ymL(nowYm())+' 時点</small></h2><div class="scroll"><table class="kv" data-out="summary"></table></div></section>'+
+  '<section><h2>手元資金の推移<small>今日 → 開業 → 開業後</small></h2><div class="chart" id="chart"></div><p id="readout">グラフをなぞると、その月の残高が出ます。</p></section>'+
+  '<section><h2>道のり<small>行をタップで編集・丸で完了</small></h2><ol class="tl" data-out="timeline"></ol><button class="add" data-act="add-ms">＋ 節目を追加</button></section>'+
+  '<section><h2>データ</h2><p class="note">貯蓄・積立・学費・パート月額などの初期値は例または仮置きです。ご自身の数字に置き換えてください。所得税・住民税・消費税の納付は試算に含めていません。</p><div class="btns"><button data-act="copy">計画を引き継ぎテキストとしてコピー</button><button class="danger" data-act="reset">初期値に戻す</button></div></section>';
+},
+funds:function(){
+  return '<section><h2>開業までに貯める</h2><div class="form">'+
+    inp('pre.savings','現在の開業用貯蓄')+inp('pre.monthly','毎月の積立')+
+    inp('pre.bonus','賞与からの積立（年額）',{h:'6月と12月に半分ずつ加算'})+inp('sim.buffer','運転資金として持つ月数',{t:'int',u:'か月'})+
+    '</div></section>'+
+  '<section><h2>必要な手元資金<small>開業日に必要な額</small></h2><div class="scroll"><table data-out="required"></table></div></section>'+
+  '<section><h2>開業時の見込み<small data-out="openlabel"></small></h2><div class="scroll"><table data-out="projected"></table></div><div data-out="reverse"></div></section>'+
+  '<section><h2>借入<small>使う場合のみ</small></h2><div class="form w3">'+
+    inp('sim.loan','開業時の借入額',{h:'創業融資など。0で借入なし'})+inp('sim.loanYears','返済期間',{t:'dec',u:'年'})+inp('sim.loanRate','金利（年）',{t:'dec',u:'%'})+
+    '</div><p class="note" data-out="loan"></p></section>';
+},
+estimate:function(){
+  return '<section><h2>開業費用<small>行をタップで金額を修正</small></h2><div class="scroll"><table data-out="opencosts"></table></div><button class="add" data-act="add-oc">＋ 行を追加</button></section>'+
+  '<section><h2>月の固定費<small>所長1人分</small></h2><div class="scroll"><table data-out="fixed"></table></div><button class="add" data-act="add-fx">＋ 行を追加</button></section>'+
+  '<section><h2>損益分岐<small>必要な顧問先数</small></h2><div data-out="breakeven" style="display:flex;flex-direction:column;gap:10px"></div></section>';
+},
+after:function(){
+  var S=state.sim;
+  return '<section><h2>前提</h2><div class="btns"><button data-act="preset1">1人版にする</button><button data-act="preset2">2人版にする</button></div><div class="form">'+
+    inp('sim.clients','開業時の顧問先数',{t:'int',u:'件'})+inp('sim.growth','顧問先の増加',{t:'dec',u:'件/月'})+
+    inp('sim.fee','顧問料 月額単価')+inp('sim.kessan','決算料（年額・1件）',{h:'180,000円で実効4.5万円。月割で収入に加算'})+
+    inp('sim.living','生活費（月）')+inp('sim.kokuho','国保・国民年金（月）',{h:'未試算。生活費に含めるなら0のまま'})+
+    '<label class="f" for="i_months">試算する期間<span class="inp"><select id="i_months" data-b="sim.months" data-t="sel">'+[12,24,36,60].map(function(n){return '<option value="'+n+'"'+(S.months===n?' selected':'')+'>'+n+'か月</option>'}).join('')+'</select></span></label>'+
+    '<div class="f" style="display:flex;flex-direction:column;gap:6px"><label class="chk"><input type="checkbox" id="i_auto" data-b="sim.autoFunds" data-t="chk"'+(S.autoFunds?' checked':'')+'>手元資金は「資金」タブの見込みを使う</label>'+
+    '<span id="fundsbox"'+(S.autoFunds?' hidden':'')+'>'+inp('sim.funds','開業時の手元資金')+'</span></div>'+
+    '</div></section>'+
+  '<section><h2>人員計画<small>行をタップで編集</small></h2><div class="scroll"><table data-out="staff"></table></div><button class="add" data-act="add-st">＋ 人員を追加</button><p class="note">労働分配率はスタッフ人件費（社保・ツール込み）÷売上で計算。所長の取り分は含めていません。</p></section>'+
+  '<section><h2>結果</h2><div class="scroll"><table class="kv" data-out="aftersum"></table></div></section>'+
+  '<section><h2>残高試算表<small>単位：千円</small></h2><div class="scroll"><table class="mon" data-out="monthly"></table></div><p class="note">収支＝収入−（固定費＋人件費＋生活費＋国保年金＋返済＋採用時の初期費用）。採用月は上線つき、赤字月は赤地。</p></section>';
+}
+};
+
+var OUT={
+summary:function(C){
+  var ms=state.ms,done=ms.filter(function(m){return m.done}).length;
+  var next=ms.filter(function(m){return !m.done}).sort(function(a,b){return ymN(a.ym)-ymN(b.ym)})[0];
+  var last=C.rows[C.rows.length-1],fb=C.firstBlack?C.rows[C.firstBlack-1]:null;
+  var row=function(k,v,s){return '<tr><th>'+k+'</th><td class="n">'+v+(s?'<small>'+s+'</small>':'')+'</td></tr>'};
+  return row('開業予定',ymL(C.open),C.preN>0?'あと'+dur(C.preN):'開業済みの月')+
+    row('節目の進み具合',done+' / '+ms.length+' 完了',next?'次：'+esc(next.label)+'（'+ymL(next.ym)+'）':'すべて完了')+
+    row('必要な手元資金',yen(C.required)+'円','開業費用＋運転資金'+state.sim.buffer+'か月')+
+    row('開業時の見込み資金',yen(C.funds+C.loan)+'円',(state.sim.autoFunds?'今の積立ペース':'手入力')+(C.loan?'＋借入'+yen(C.loan)+'円':''))+
+    row('過不足','<span class="'+(C.gap<0?'neg':'pos')+'">'+yen(C.gap)+'円</span>',C.gap<0?'不足':'充足')+
+    row('単月黒字化（生活費込み）',fb?'開業'+fb.m+'か月目':'<span class="neg">'+C.N+'か月以内に届かず</span>',fb?ymL(fb.ym)+'・顧問先'+Math.round(fb.clients*10)/10+'件':'')+
+    row('残高の底','<span class="'+(C.minBal<0?'neg':'')+'">'+yen(C.minBal)+'円</span>',C.minM?'開業'+C.minM+'か月目（'+ymL(C.rows[C.minM-1].ym)+'）':'開業費用を払った直後')+
+    row(C.N+'か月目の労働分配率',C.staffMAll?(last.ratio*100).toFixed(1)+'%':'―',C.staffMAll?'目安40%':'スタッフなし');
+},
+timeline:function(C){
+  var items=state.ms.map(function(m){return {ym:m.ym,m:m}});
+  state.staff.forEach(function(s){if(s.on) items.push({ym:ymAdd(C.open,s.start-1),st:s})});
+  if(C.firstBlack) items.push({ym:C.rows[C.firstBlack-1].ym,calc:'単月黒字化（生活費込み）',memo:'顧問先'+Math.round(C.rows[C.firstBlack-1].clients*10)/10+'件'});
+  if(C.minM) items.push({ym:C.rows[C.minM-1].ym,calc:'残高の底 '+yen(C.minBal)+'円',neg:C.minBal<0});
+  items.sort(function(a,b){return ymN(a.ym)-ymN(b.ym)||((a.m&&a.m.kind==='open')?-1:0)-((b.m&&b.m.kind==='open')?-1:0)});
+  var nextId=(state.ms.filter(function(m){return !m.done}).sort(function(a,b){return ymN(a.ym)-ymN(b.ym)})[0]||{}).id;
+  return items.map(function(it){
+    var d=ymDiff(C.now,it.ym),rel=d>0?'あと'+dur(d):(d===0?'今月':dur(d)+'前');
+    if(it.m){var m=it.m,late=!m.done&&d<0;
+      return '<li class="'+(m.done?'done ':'')+(m.id===nextId?'next ':'')+(m.kind==='open'?'open ':'')+(late?'late':'')+'"><button class="dot" data-act="toggle-ms" data-id="'+m.id+'" aria-label="'+esc(m.label)+'を'+(m.done?'未完了に戻す':'完了にする')+'">'+(m.done?'✓':'')+'</button>'+
+      '<div class="tlb" data-act="edit-ms" data-id="'+m.id+'" role="button" tabindex="0"><span class="when"><span>'+ymL(m.ym)+'</span><b>'+(m.done?'完了':late?'予定を過ぎています':rel)+'</b>'+(m.cost>0?'<span class="n">支出 '+yen(m.cost)+'円</span>':'')+'</span><span class="what">'+esc(m.label)+'</span>'+(m.note?'<span class="memo">'+esc(m.note)+'</span>':'')+'</div></li>';}
+    if(it.st){return '<li><span class="dot" style="border-color:var(--accent)"></span><div class="tlb" data-act="edit-st" data-id="'+it.st.id+'" role="button" tabindex="0"><span class="when"><span>'+ymL(it.ym)+'</span><b>開業'+it.st.start+'か月目</b><span class="n">月 '+yen(it.st.monthly)+'円</span></span><span class="what">採用：'+esc(it.st.label)+'</span></div></li>';}
+    return '<li class="calc"><span class="dot"></span><div class="tlb" style="cursor:default"><span class="when"><span>'+ymL(it.ym)+'</span><b>試算</b></span><span class="what'+(it.neg?' neg':'')+'">'+it.calc+'</span>'+(it.memo?'<span class="memo">'+it.memo+'</span>':'')+'</div></li>';
+  }).join('');
+},
+openlabel:function(C){return ymL(C.open)+'（あと'+dur(C.preN)+'）'},
+required:function(C){
+  var S=state.sim,r=function(a,b,c){return '<tr'+(c?' class="'+c+'"':'')+'><td>'+a+'</td><td class="r n">'+b+'</td></tr>'};
+  return r('開業費用（見積タブ）',yen(C.openCost))+
+    (C.staffInit1?r('開業時採用の初期費用',yen(C.staffInit1)):'')+
+    r('運転資金 '+S.buffer+'か月分<span class="memo">月額 '+yen(C.month1)+'円 ＝ 固定費 '+yen(C.fixedBase)+(C.staffM1?' ＋ 人件費 '+yen(C.staffM1):'')+' ＋ 生活費 '+yen(S.living)+(S.kokuho?' ＋ 国保年金 '+yen(S.kokuho):'')+'</span>',yen(C.month1*S.buffer))+
+    r('必要な手元資金',yen(C.required)+'円','total');
+},
+projected:function(C){
+  var r=function(a,b,c){return '<tr'+(c?' class="'+c+'"':'')+'><td>'+a+'</td><td class="r n">'+b+'</td></tr>'};
+  var h=state.sim.autoFunds?'':r('<span class="warn">開業後タブで手元資金を手入力中。下の過不足は手入力額で計算</span>','');
+  return r('現在の貯蓄',yen(state.pre.savings))+r('毎月の積立 × '+C.preN+'か月',yen(C.accM))+r('賞与からの積立',yen(C.accB))+
+    r('節目の支出（学費など・未完了分）',yen(-C.accC))+r('積立による見込み',yen(C.projected),'sub')+h+
+    (C.loan?r('借入',yen(C.loan)):'')+r('必要な手元資金',yen(-C.required))+
+    r('過不足','<span class="'+(C.gap<0?'neg':'pos')+'">'+yen(C.gap)+'円</span>','total');
+},
+reverse:function(C){
+  if(!state.sim.autoFunds) return '';
+  var P=state.pre,base=C.projected-C.accM,target=C.required-C.loan;
+  var needM=C.preN>0?Math.max(0,Math.ceil((target-base)/C.preN/1000)*1000):0;
+  // 今のペースで届く月
+  var bal=P.savings,reach=null,now=C.now;
+  var cost=function(ym,first){return sum(state.ms,function(m){return (!m.done&&m.kind!=='open'&&m.cost>0&&(first?ymN(m.ym)<=ymN(ym):m.ym===ym))?m.cost:0})};
+  var lastCost=Math.max.apply(null,[0].concat(state.ms.filter(function(m){return !m.done&&m.kind!=='open'&&m.cost>0}).map(function(m){return ymDiff(now,m.ym)})));
+  bal-=cost(now,true);
+  for(var i=0;i<=360;i++){
+    if(i>0){var ym=ymAdd(now,i),mo=+ym.slice(5,7);bal+=P.monthly;if(mo===6||mo===12)bal+=P.bonus/2;bal-=cost(ym)}
+    if(i>=lastCost&&bal>=target){reach=ymAdd(now,i);break}
+  }
+  var rd=reach?ymDiff(C.open,reach):null;
+  return '<div class="scroll"><table class="kv"><tr><th>予定月に間に合う毎月の積立</th><td class="n">'+yen(needM)+'円<small>今は '+yen(P.monthly)+'円（差 '+yen(needM-P.monthly)+'円）</small></td></tr>'+
+    '<tr><th>今のペースで届く月</th><td class="n">'+(reach?ymL(reach):'<span class="neg">30年以内に届かず</span>')+'<small>'+(reach?(rd>0?'予定より'+dur(rd)+'遅れ':rd<0?'予定より'+dur(rd)+'早い':'予定どおり'):'')+'</small></td></tr></table></div>';
+},
+loan:function(C){return C.loan?'元利均等で毎月 '+yen(C.loanPay)+'円を返済（開業1か月目から）。開業後の試算表の支出に入ります。':'借入なしで試算しています。'},
+opencosts:function(C){
+  var g='',h='<thead><tr><th>項目</th><th class="r">金額（円）</th></tr></thead><tbody>';
+  var groups=[];state.openCosts.forEach(function(x){if(groups.indexOf(x.g)<0)groups.push(x.g)});
+  groups.forEach(function(gn){
+    var it=state.openCosts.filter(function(x){return x.g===gn});
+    h+='<tr class="grp"><td colspan="2">'+esc(gn)+'</td></tr>';
+    it.forEach(function(x){h+='<tr class="tap" data-act="edit-oc" data-id="'+x.id+'" tabindex="0"><td>'+esc(x.label)+(x.note?'<span class="memo">'+esc(x.note)+'</span>':'')+'</td><td class="r n">'+yen(x.amt)+'</td></tr>'});
+    h+='<tr class="sub"><td>小計</td><td class="r n">'+yen(sum(it,function(x){return x.amt}))+'</td></tr>';
+  });
+  return h+'<tr class="total"><td>開業時に必要な現金</td><td class="r n">'+yen(C.openCost)+'</td></tr></tbody>';
+},
+fixed:function(C){
+  var h='<thead><tr><th>項目</th><th class="r">月額（円）</th></tr></thead><tbody>',groups=[];
+  state.fixed.forEach(function(x){if(groups.indexOf(x.g)<0)groups.push(x.g)});
+  groups.forEach(function(gn){
+    var it=state.fixed.filter(function(x){return x.g===gn});
+    h+='<tr class="grp"><td colspan="2">'+esc(gn)+'</td></tr>';
+    it.forEach(function(x){h+='<tr class="tap" data-act="edit-fx" data-id="'+x.id+'" tabindex="0"><td>'+esc(x.label)+(x.note?'<span class="memo">'+esc(x.note)+'</span>':'')+'</td><td class="r n">'+yen(x.amt)+'</td></tr>'});
+    h+='<tr class="sub"><td>小計</td><td class="r n">'+yen(sum(it,function(x){return x.amt}))+'</td></tr>';
+  });
+  return h+'<tr class="total"><td>月の固定費</td><td class="r n">'+yen(C.fixedBase)+'</td></tr><tr><td>年額換算</td><td class="r n">'+yen(C.fixedBase*12)+'</td></tr></tbody>';
+},
+breakeven:function(C){
+  var S=state.sim,prices=[20000,30000,40000,50000];
+  if(prices.indexOf(Math.round(C.price))<0) prices.push(Math.round(C.price));
+  prices.sort(function(a,b){return a-b});
+  var tbl=function(cap,fixed){
+    return '<h3>'+cap+'　固定費 '+yen(fixed)+'円／月</h3><div class="scroll"><table><thead><tr><th>単価（月）</th><th class="r">固定費のみ</th><th class="r">生活費込み</th></tr></thead><tbody>'+
+    prices.map(function(p){return '<tr'+(p===Math.round(C.price)?' class="sub"':'')+'><td class="n">'+yen(p)+'円'+(p===Math.round(C.price)?'<span class="memo">いまの実効単価</span>':'')+'</td><td class="r n">'+need(fixed,p)+'件</td><td class="r n">'+need(fixed+S.living+S.kokuho,p)+'件</td></tr>'}).join('')+'</tbody></table></div>';
+  };
+  var h=tbl('所長1人',C.fixedBase);
+  if(C.staffMAll) h+=tbl('採用後（開業後タブでONの全員）',C.fixedBase+C.staffMAll);
+  else h+=tbl('2人版（ベテラン社員を採用）',C.fixedBase+((state.staff.filter(function(s){return /ベテラン/.test(s.label)})[0]||{}).monthly||412000));
+  return h+'<p class="note">生活費込みは 生活費 '+yen(S.living)+'円'+(S.kokuho?'＋国保年金 '+yen(S.kokuho)+'円':'')+' を固定費に足して計算。</p>';
+},
+staff:function(C){
+  var h='<thead><tr><th>人員</th><th class="r">開始</th><th class="r">月額（円）</th><th class="r">計画</th></tr></thead><tbody>';
+  state.staff.forEach(function(s){
+    var rev=s.monthly/0.4;
+    h+='<tr class="tap" data-act="edit-st" data-id="'+s.id+'" tabindex="0"><td>'+esc(s.label)+'<span class="memo">分配率40%の目安：月商 '+yen(rev)+'円（'+need(rev,C.price)+'件）</span></td><td class="r n">'+s.start+'か月目</td><td class="r n">'+yen(s.monthly)+'</td><td class="r"><button class="'+(s.on?'on':'')+'" data-act="toggle-st" data-id="'+s.id+'" aria-pressed="'+s.on+'">'+(s.on?'採用':'未定')+'</button></td></tr>';
+  });
+  var all=C.staffMAll;
+  return h+'<tr class="total"><td>採用する人員の人件費 計</td><td></td><td class="r n">'+yen(all)+'</td><td></td></tr>'+
+    (all?'<tr><td>全員を40%で賄う月商</td><td></td><td class="r n">'+yen(all/0.4)+'</td><td class="r n">'+need(all/0.4,C.price)+'件</td></tr>':'')+'</tbody>';
+},
+aftersum:function(C){
+  var last=C.rows[C.rows.length-1],fb=C.firstBlack?C.rows[C.firstBlack-1]:null,fz=C.firstBiz?C.rows[C.firstBiz-1]:null;
+  var row=function(k,v,s){return '<tr><th>'+k+'</th><td class="n">'+v+(s?'<small>'+s+'</small>':'')+'</td></tr>'};
+  return row('開業直後の残高','<span class="'+(C.b0<0?'neg':'')+'">'+yen(C.b0)+'円</span>','手元資金 '+yen(C.funds)+(C.loan?'＋借入 '+yen(C.loan):'')+' − 開業費用 '+yen(C.openCost))+
+    row('実効単価（月）',yen(C.price)+'円',state.sim.kessan?'顧問料＋決算料の月割':'決算料なし')+
+    row('事業の単月黒字化',fz?'開業'+fz.m+'か月目':'<span class="neg">期間内に届かず</span>',fz?'生活費を除く・顧問先'+Math.round(fz.clients*10)/10+'件':'')+
+    row('生活費込みの単月黒字化',fb?'開業'+fb.m+'か月目':'<span class="neg">期間内に届かず</span>',fb?ymL(fb.ym)+'・顧問先'+Math.round(fb.clients*10)/10+'件':'')+
+    row('残高の底','<span class="'+(C.minBal<0?'neg':'')+'">'+yen(C.minBal)+'円</span>',C.minM?'開業'+C.minM+'か月目':'開業直後')+
+    row(C.N+'か月目の残高','<span class="'+(last.bal<0?'neg':'')+'">'+yen(last.bal)+'円</span>','顧問先'+Math.round(last.clients*10)/10+'件・月商 '+yen(last.rev)+'円')+
+    row(C.N+'か月目の労働分配率',C.staffMAll?'<span class="'+(last.ratio>0.4?'neg':'pos')+'">'+(last.ratio*100).toFixed(1)+'%</span>':'―',C.staffMAll?'目安40%。40%で払える人件費は '+yen(last.rev*0.4)+'円':'スタッフなし');
+},
+monthly:function(C){
+  var h='<thead><tr><th>月</th><th>件数</th><th>収入</th><th>支出</th><th>収支</th><th>残高</th><th>分配率</th></tr></thead><tbody>';
+  C.rows.forEach(function(r){
+    h+='<tr class="'+(r.net<0?'redrow ':'')+(r.hire.length?'mark':'')+'"><td class="n" style="'+(r.net<0?'background:var(--red-soft)':'')+'">'+r.m+'<span class="memo">'+r.ym.slice(2).replace('-','/')+(r.hire.length?' 採用':'')+'</span></td><td class="n">'+Math.round(r.clients*10)/10+'</td><td class="n">'+sen(r.rev)+'</td><td class="n">'+sen(r.out)+'</td><td class="n'+cls(r.net)+'">'+sen(r.net)+'</td><td class="n'+cls(r.bal)+'">'+sen(r.bal)+'</td><td class="n'+(r.ratio>0.4?' neg':'')+'">'+(r.staff?(r.ratio*100).toFixed(0)+'%':'―')+'</td></tr>';
+  });
+  return h+'</tbody>';
+}
+};
+
+/* ---------- グラフ（SVG・外部ライブラリなし） ---------- */
+function drawChart(el,C){
+  var W=360,H=214,L=46,R=10,T=16,B=24,pw=W-L-R,ph=H-T-B;
+  var pts=[];C.pre.forEach(function(p){pts.push({ym:p.ym,bal:p.bal})});
+  var total=C.preN+C.N;
+  C.rows.forEach(function(r){pts.push({ym:r.ym,bal:r.bal,m:r.m})});
+  var vals=pts.map(function(p){return p.bal}).concat([C.b0,0]);
+  var lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals); if(hi-lo<1){hi=lo+1000000}
+  var raw=(hi-lo)/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),step=[1,2,5,10].map(function(k){return k*mag}).filter(function(s){return s>=raw})[0];
+  var y0=Math.floor(lo/step)*step,y1=Math.ceil(hi/step)*step;
+  var X=function(i){return L+pw*i/total},Y=function(v){return T+ph*(1-(v-y0)/(y1-y0))};
+  var path='',i;
+  for(i=0;i<=C.preN;i++) path+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(pts[i].bal).toFixed(1);
+  path+='L'+X(C.preN).toFixed(1)+' '+Y(C.b0).toFixed(1);
+  for(i=C.preN+1;i<=total;i++) path+='L'+X(i).toFixed(1)+' '+Y(pts[i].bal).toFixed(1);
+  var area=path+'L'+X(total).toFixed(1)+' '+Y(0).toFixed(1)+'L'+X(0).toFixed(1)+' '+Y(0).toFixed(1)+'Z';
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="今日から開業後までの手元資金の推移"><defs><clipPath id="cneg"><rect x="0" y="'+Y(0).toFixed(1)+'" width="'+W+'" height="'+H+'"/></clipPath><clipPath id="cpos"><rect x="0" y="0" width="'+W+'" height="'+Y(0).toFixed(1)+'"/></clipPath></defs>';
+  for(var v=y0;v<=y1+1;v+=step){s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'" stroke="var(--line)" stroke-width="'+(v===0?0:1)+'"/><text x="'+(L-5)+'" y="'+(Y(v)+3).toFixed(1)+'" text-anchor="end">'+(v<0?'△':'')+Math.abs(Math.round(v/10000)).toLocaleString()+'万</text>'}
+  s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(0).toFixed(1)+'" y2="'+Y(0).toFixed(1)+'" stroke="var(--rule)" stroke-width="1"/>';
+  var years=Math.ceil(total/12),every=years>8?2:1,k=0;
+  for(i=0;i<=total;i++){var ym=ymAdd(C.now,i);if(ym.slice(5)==='01'){if(k%every===0&&X(i)<W-R-8)s+='<line x1="'+X(i).toFixed(1)+'" x2="'+X(i).toFixed(1)+'" y1="'+(H-B)+'" y2="'+(H-B+4)+'" stroke="var(--muted)"/><text x="'+X(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+ym.slice(0,4)+'</text>';k++}}
+  s+='<path d="'+area+'" fill="var(--accent)" fill-opacity=".12" clip-path="url(#cpos)"/><path d="'+area+'" fill="var(--red)" fill-opacity=".14" clip-path="url(#cneg)"/>';
+  s+='<path d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" clip-path="url(#cpos)"/><path d="'+path+'" fill="none" stroke="var(--red)" stroke-width="2" stroke-linejoin="round" clip-path="url(#cneg)"/>';
+  var ox=X(C.preN),anchor=ox>W-60?'end':(ox<L+30?'start':'middle');
+  s+='<line x1="'+ox.toFixed(1)+'" x2="'+ox.toFixed(1)+'" y1="'+T+'" y2="'+(H-B)+'" stroke="var(--ink)" stroke-dasharray="3 3"/><text x="'+ox.toFixed(1)+'" y="'+(T-5)+'" text-anchor="'+anchor+'" style="fill:var(--ink);font-family:var(--text);font-weight:700">開業</text>';
+  state.ms.forEach(function(m){var d=ymDiff(C.now,m.ym);if(m.kind!=='open'&&!m.done&&d>=0&&d<=C.preN)s+='<circle cx="'+X(d).toFixed(1)+'" cy="'+Y(pts[d].bal).toFixed(1)+'" r="2.6" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>'});
+  state.staff.forEach(function(st){if(st.on&&st.start<=C.N){var d=C.preN+st.start;s+='<circle cx="'+X(d).toFixed(1)+'" cy="'+Y(pts[d].bal).toFixed(1)+'" r="3" fill="var(--ink)"/>'}});
+  var e=pts[total];
+  s+='<circle cx="'+X(total).toFixed(1)+'" cy="'+Y(e.bal).toFixed(1)+'" r="3.5" fill="'+(e.bal<0?'var(--red)':'var(--accent)')+'"/>';
+  s+='<line id="cur" x1="0" x2="0" y1="'+T+'" y2="'+(H-B)+'" stroke="var(--muted)" stroke-width="1" visibility="hidden"/></svg>';
+  el.innerHTML=s;
+  var svg=el.firstChild,cur=$('#cur',svg),ro=$('#readout');
+  var move=function(ev){
+    var r=svg.getBoundingClientRect(),px=(ev.clientX-r.left)/r.width*W,i=Math.max(0,Math.min(total,Math.round((px-L)/pw*total))),p=pts[i];
+    cur.setAttribute('x1',X(i));cur.setAttribute('x2',X(i));cur.setAttribute('visibility','visible');
+    ro.innerHTML='<b>'+ymL(i<=C.preN?p.ym:ymAdd(p.ym,0))+'</b>'+(i>C.preN?'（開業'+p.m+'か月目の月末）':i===C.preN?'（開業費用の支払い前）':'')+'　残高 <span class="n'+cls(p.bal)+'">'+yen(p.bal)+'円</span>';
+  };
+  svg.addEventListener('pointermove',move);svg.addEventListener('pointerdown',move);
+}
+
+/* ---------- 編集シート ---------- */
+var sheetCtx=null;
+function openSheet(o){
+  sheetCtx=o;
+  var h='<div class="box" role="dialog" aria-label="'+esc(o.title)+'"><h2>'+esc(o.title)+'</h2><div class="form">';
+  o.fields.forEach(function(f){
+    var v=o.value[f.k],id='f_'+f.k;
+    if(f.t==='chk') h+='<label class="chk full"><input type="checkbox" id="'+id+'"'+(v?' checked':'')+'>'+f.l+'</label>';
+    else if(f.t==='area') h+='<label class="f full" for="'+id+'">'+f.l+'<span class="inp"><textarea id="'+id+'" readonly>'+esc(v)+'</textarea></span></label>';
+    else h+='<label class="f'+(f.full?' full':'')+'" for="'+id+'">'+f.l+'<span class="inp"><input id="'+id+'" '+(f.t==='ym'?'type="month"':f.t==='text'?'type="text" class="t"':'type="text" inputmode="numeric"')+' value="'+esc(f.t==='yen'?yen(v):v)+'" autocomplete="off">'+(f.u?'<i>'+f.u+'</i>':'')+'</span>'+(f.h?'<span class="h">'+f.h+'</span>':'')+'</label>';
+  });
+  h+='</div><div class="btns">'+(o.onSave?'<button class="pri" data-act="sheet-save">保存</button>':'')+'<button data-act="sheet-close">'+(o.onSave?'やめる':'閉じる')+'</button>'+(o.onDelete?'<button class="danger" data-act="sheet-del" style="margin-left:auto">削除</button>':'')+'</div></div>';
+  var el=$('#sheet');el.innerHTML=h;el.hidden=false;
+}
+function closeSheet(){$('#sheet').hidden=true;$('#sheet').innerHTML='';sheetCtx=null}
+function sheetSave(){
+  var o=sheetCtx,out={};
+  o.fields.forEach(function(f){var el=$('#f_'+f.k);
+    out[f.k]=f.t==='chk'?el.checked:(f.t==='yen'||f.t==='int')?Math.round(toNum(el.value)):(f.t==='ym'?(okYm(el.value)?el.value:o.value[f.k]):el.value.trim())});
+  o.onSave(out);closeSheet();save();render();
+}
+var byId=function(arr,id){return arr.filter(function(x){return x.id===id})[0]};
+var rm=function(key,id){state[key]=state[key].filter(function(x){return x.id!==id})};
+function editMs(m,isNew){
+  var isOpen=m.kind==='open';
+  openSheet({title:isNew?'節目を追加':isOpen?'開業予定月':'節目を編集',value:m,
+    fields:[{k:'label',l:'内容',t:'text',full:1},{k:'ym',l:'予定月',t:'ym'}].concat(isOpen?[]:[{k:'cost',l:'その月の支出',t:'yen',u:'円',h:'学費など。貯蓄から差し引く'}]).concat([{k:'note',l:'メモ',t:'text',full:1},{k:'done',l:'完了した'+(isOpen?'':'（支出は支払い済みとして扱う）'),t:'chk'}]),
+    onSave:function(v){if(!v.label)v.label='（無題）';Object.assign(m,v);if(isNew)state.ms.push(m)},
+    onDelete:(isNew||isOpen)?null:function(){rm('ms',m.id)}});
+}
+function editItem(key,x,isNew,title){
+  openSheet({title:title,value:x,
+    fields:[{k:'g',l:'区分',t:'text'},{k:'label',l:'項目',t:'text'},{k:'amt',l:key==='fixed'?'月額':'金額',t:'yen',u:'円',full:1},{k:'note',l:'メモ',t:'text',full:1}],
+    onSave:function(v){if(!v.label)v.label='（無題）';if(!v.g)v.g='その他';Object.assign(x,v);if(isNew)state[key].push(x)},
+    onDelete:isNew?null:function(){rm(key,x.id)}});
+}
+function editSt(s,isNew){
+  openSheet({title:isNew?'人員を追加':'人員を編集',value:s,
+    fields:[{k:'label',l:'役割',t:'text',full:1},{k:'start',l:'採用する月',t:'int',u:'か月目',h:'開業月を1か月目とする'},{k:'monthly',l:'月額コスト',t:'yen',u:'円',h:'給与＋賞与月割＋社保約15%＋ツール約1万円'},{k:'init',l:'採用時の初期費用',t:'yen',u:'円',h:'PC等 約18万円'},{k:'note',l:'メモ',t:'text',full:1},{k:'on',l:'計画に入れる（採用）',t:'chk'}],
+    onSave:function(v){if(!v.label)v.label='（無題）';v.start=Math.max(1,v.start||1);Object.assign(s,v);if(isNew)state.staff.push(s)},
+    onDelete:isNew?null:function(){rm('staff',s.id)}});
+}
+
+/* ---------- 引き継ぎテキスト ---------- */
+function handover(){
+  var C=calc(),S=state.sim,L=[];
+  L.push('# 税理士事務所 独立ロードマップ（'+ymL(C.now)+'時点の計画）','');
+  L.push('## 道のり');
+  state.ms.slice().sort(function(a,b){return ymN(a.ym)-ymN(b.ym)}).forEach(function(m){L.push('- '+ymL(m.ym)+'：'+m.label+(m.done?'【完了】':'')+(m.cost?'（支出 '+yen(m.cost)+'円）':''))});
+  state.staff.forEach(function(s){if(s.on)L.push('- 開業'+s.start+'か月目：'+s.label+' 採用（月 '+yen(s.monthly)+'円）')});
+  L.push('','## 資金','- 現在の貯蓄 '+yen(state.pre.savings)+'円／毎月の積立 '+yen(state.pre.monthly)+'円／賞与からの積立 年'+yen(state.pre.bonus)+'円',
+    '- 開業費用 '+yen(C.openCost)+'円／月の固定費 '+yen(C.fixedBase)+'円',
+    '- 必要な手元資金 '+yen(C.required)+'円（運転資金'+S.buffer+'か月）／開業時の見込み '+yen(C.funds+C.loan)+'円／過不足 '+yen(C.gap)+'円');
+  L.push('','## 開業後の前提','- 顧問先 開始'+S.clients+'件・月'+S.growth+'件増／単価 '+yen(S.fee)+'円／決算料 年'+yen(S.kessan)+'円／生活費 '+yen(S.living)+'円／国保年金 '+yen(S.kokuho)+'円',
+    '- 生活費込みの単月黒字化：'+(C.firstBlack?'開業'+C.firstBlack+'か月目':C.N+'か月以内に届かず')+'／残高の底 '+yen(C.minBal)+'円／'+C.N+'か月目の残高 '+yen(C.rows[C.N-1].bal)+'円');
+  L.push('','※ △はマイナス。所得税・住民税・消費税は未考慮。');
+  return L.join('\n');
+}
+
+/* ---------- 操作 ---------- */
+var resetArmed=0;
+document.addEventListener('click',function(ev){
+  var t=ev.target.closest('[data-act]'); if(!t){if(ev.target.id==='sheet')closeSheet();return}
+  var a=t.dataset.act,id=t.dataset.id;
+  if(a==='toggle-ms'){var m=byId(state.ms,id);m.done=!m.done;save();refresh()}
+  else if(a==='edit-ms')editMs(byId(state.ms,id));
+  else if(a==='add-ms')editMs({id:uid(),label:'',ym:ymAdd(nowYm(),12),done:false,cost:0,note:'',kind:''},true);
+  else if(a==='edit-oc')editItem('openCosts',byId(state.openCosts,id),false,'開業費用を編集');
+  else if(a==='add-oc')editItem('openCosts',{id:uid(),g:'その他',label:'',amt:0,note:''},true,'開業費用に行を追加');
+  else if(a==='edit-fx')editItem('fixed',byId(state.fixed,id),false,'固定費を編集');
+  else if(a==='add-fx')editItem('fixed',{id:uid(),g:'その他雑費',label:'',amt:0,note:''},true,'固定費に行を追加');
+  else if(a==='toggle-st'){ev.stopPropagation();var s=byId(state.staff,id);s.on=!s.on;save();refresh()}
+  else if(a==='edit-st')editSt(byId(state.staff,id));
+  else if(a==='add-st')editSt({id:uid(),label:'',on:true,start:13,monthly:100000,init:180000,note:''},true);
+  else if(a==='preset1'||a==='preset2'){
+    state.staff.forEach(function(s){s.on=false});
+    if(a==='preset2'){var v=state.staff.filter(function(s){return /ベテラン/.test(s.label)})[0];if(v){v.on=true;v.start=1}}
+    save();render();
+  }
+  else if(a==='sheet-save')sheetSave();
+  else if(a==='sheet-close')closeSheet();
+  else if(a==='sheet-del'){sheetCtx.onDelete();closeSheet();save();render()}
+  else if(a==='copy'){
+    var txt=handover(),done=function(){t.textContent='コピーしました';setTimeout(function(){t.textContent='計画を引き継ぎテキストとしてコピー'},2000)};
+    var fb=function(){openSheet({title:'引き継ぎテキスト（長押しでコピー）',value:{txt:txt},fields:[{k:'txt',l:'',t:'area'}]});var ta=$('#f_txt');ta.focus();ta.select()};
+    try{navigator.clipboard.writeText(txt).then(done,fb)}catch(e){fb()}
+  }
+  else if(a==='reset'){
+    if(Date.now()-resetArmed<4000){state=defaults();resetArmed=0;save();render()}
+    else{resetArmed=Date.now();t.textContent='もう一度押すと初期値に戻します';setTimeout(function(){if(t.isConnected)t.textContent='初期値に戻す'},4000)}
+  }
+});
+document.addEventListener('keydown',function(ev){
+  if(ev.key==='Escape'&&sheetCtx)closeSheet();
+  if(ev.key==='Enter'&&ev.target.matches&&ev.target.matches('tr.tap,.tlb[data-act]'))ev.target.click();
+});
+function bound(ev){
+  var el=ev.target,p=el.dataset&&el.dataset.b; if(!p)return;
+  var k=p.split('.'),t=el.dataset.t,v;
+  if(t==='chk')v=el.checked;else if(t==='sel')v=+el.value;else if(t==='dec')v=toNum(el.value);else if(t==='int')v=Math.max(0,Math.round(toNum(el.value)));else v=Math.round(toNum(el.value));
+  state[k[0]][k[1]]=v;save();
+  if(p==='sim.autoFunds')$('#fundsbox').hidden=v;
+  refresh();
+}
+document.addEventListener('input',bound);
+document.addEventListener('change',bound);
+document.addEventListener('focusin',function(ev){var el=ev.target;if(el.dataset&&el.dataset.b&&el.type==='text'){el.value=String(toNum(el.value));el.select()}});
+document.addEventListener('focusout',function(ev){var el=ev.target;if(el.dataset&&el.dataset.b&&el.type==='text'&&el.dataset.t==='yen')el.value=yen(toNum(el.value))});
+
+function route(){var h=(location.hash||'').slice(1);tab=TABS.indexOf(h)>=0?h:'roadmap';render();window.scrollTo(0,0)}
+window.addEventListener('hashchange',route);
+route();
+initCloud();
+})();
+</script>

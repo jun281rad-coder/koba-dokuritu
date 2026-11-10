@@ -122,17 +122,27 @@ function annualTax(S,inc,mon){
 /* 黒字が続くのに必要な顧問先数（2年目以降の固定費で計算）。
    o.staff: 人件費の月額／o.living: 生活費・国保年金・返済・所得税等まで賄うか／o.annual: 年間の合計で見るか（決算料込み）
    o.annual でないときは、決算料が入らない月でも収支がプラスになる件数（決算料を月に均す設定なら月割込み） */
+/* 顧問先が n 件で安定したときの月の収支（2年目以降の固定費）。o.staff: 人件費の月額
+   left＝決算料が入らない月の手残り、annual＝決算料も含めた年間の手残り。金額はすべて円 */
+function monthlyAt(S,n,o){
+  o=o||{};
+  var fixed=sum(S.fixed,function(x){return x.amt}),staff=o.staff||0,c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
+  var fee=n*S.sim.fee,kessanY=n*S.sim.kessan,rev=fee*12+kessanY;
+  var tax=annualTax(S,rev*(1-c)-(fixed+staff)*12,12),loanM=loanPayment(S);
+  var biz=fee*(1-c)-fixed-staff;                                   // 事業の利益（月・決算料を除く）
+  var left=biz-S.sim.living-S.sim.kokuho-loanM-tax/12;
+  return {n:n,fee:fee,ctax:fee*c,fixed:fixed,staff:staff,biz:biz,living:S.sim.living,kokuho:S.sim.kokuho,loan:loanM,tax:tax/12,
+    left:left,kessanNet:kessanY*(1-c),annual:left*12+kessanY*(1-c),bizAnnual:biz*12+kessanY*(1-c)};
+}
+/* 黒字が続くのに必要な顧問先数。o.living: 生活費・国保年金・返済・所得税等まで賄うか（false なら事業の利益だけ）
+   o.annual: 決算料も含めた年間の合計で見るか。決算料を月に均す設定のときは、常に年間で見る */
 function needClients(S,o){
   o=o||{};
-  var fixed=sum(S.fixed,function(x){return x.amt})+(o.staff||0),c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
-  var outM=fixed+(o.living?S.sim.living+S.sim.kokuho+loanPayment(S):0),lump=S.sim.kessanMode!=='avg';
   if(!(S.sim.fee>0)) return null;
+  var byYear=o.annual||S.sim.kessanMode==='avg';
   for(var n=1;n<=3000;n++){
-    var rev=n*S.sim.fee*12+n*S.sim.kessan,ctax=rev*c;
-    var tax=o.living?annualTax(S,rev-ctax-fixed*12,12):0;
-    var annual=rev-ctax-outM*12-tax;
-    var monthly=(lump&&!o.annual)?n*S.sim.fee*(1-c)-outM-tax/12:annual/12;
-    if(monthly>=0) return n;
+    var M=monthlyAt(S,n,o),v=o.living?(byYear?M.annual:M.left):(byYear?M.bizAnnual:M.biz);
+    if(v>=0) return n;
   }
   return null;
 }
@@ -326,6 +336,7 @@ function results(C, plan) {
     effective_monthly_price: round(C.price),
     clients_needed_for_cash_to_grow_every_month: { owner_only: needClients(plan, { living: true }), with_planned_staff: needClients(plan, { staff: C.staffMAll, living: true }), note: '生活費・税金込み。2年目以降の固定費で計算' },
     clients_needed_for_business_in_black: { owner_only: needClients(plan, {}), with_planned_staff: needClients(plan, { staff: C.staffMAll }) },
+    monthly_figures_by_client_count: [5, 10, 15, 20, 25, 30, 40, 50].map(n => { const M = monthlyAt(plan, n, { staff: C.staffMAll }); return { clients: n, advisory_fee: round(M.fee), business_profit: round(M.biz), taxes: round(M.ctax + M.tax), monthly_cash_left: round(M.left), annual_cash_left: round(M.annual) }; }),
     month_black_becomes_stable: C.stableM || null,
     first_month_in_black_incl_living_and_tax: C.firstBlack || null,
     first_month_business_in_black: C.firstBiz || null,

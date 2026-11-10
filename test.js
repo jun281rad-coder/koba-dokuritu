@@ -3,8 +3,8 @@
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/app.html', 'utf8');
 const block = src.slice(src.indexOf('/*CALC-START*/'), src.indexOf('/*CALC-END*/'));
-const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients } =
-  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients};')();
+const { defaults, calcPlan, need, incomeTax, ymAdd, migrate, needClients, monthlyAt } =
+  new Function(block + '\nreturn {defaults,calcPlan,need,incomeTax,ymAdd,migrate,needClients,monthlyAt};')();
 
 let pass = 0, fail = 0;
 function eq(name, got, want, tol = 0.5) {
@@ -144,6 +144,24 @@ eq('必要件数 決算料一括 年間', needClients(Sn, { living: true, annual
 C = calcPlan(base(), NOW);
 eq('黒字が続き始める月（税金なし）', C.stableM, 9);     // 9か月目：13件×3万＝39万 ≥ 38.5万。13か月目以降も 17件×3万＝51万 ≥ 44万
 eq('1〜8か月目は赤字', C.rows.slice(0, 8).every(r => r.red), true);
+
+// --- 件数を決めたときの月の収支 ---
+let Mx = monthlyAt(base(), 15, {});                    // 税金なし
+eq('15件 顧問料', Mx.fee, 450000);
+eq('15件 事業の利益', Mx.biz, 450000 - 140217);
+eq('15件 月の手残り', Mx.left, 450000 - 140217 - 300000);
+eq('15件 年間の手残り', Mx.annual, (450000 - 140217 - 300000) * 12);
+Mx = monthlyAt(base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; }), 18, {});
+eq('18件 消費税', Mx.ctax, 540000 * 0.045);
+eq('18件 事業の利益', Mx.biz, 540000 * 0.955 - 140217);
+// 事業の利益（年）4,505,796 → 課税所得 3,275,796 → 所得税 (3,275,000×10%−97,500)×1.021、住民税 342,580、事業税 80,290
+eq('18件 税額（月）', Mx.tax * 12, (3275000 * 0.10 - 97500) * 1.021 + (3275796 + 150000) * 0.10 + (4505796 - 2900000) * 0.05, 1);
+eq('18件 月の手残り', Mx.left, 540000 * 0.955 - 140217 - 300000 - Mx.tax, 1e-6);
+eq('18件は黒字', Mx.left >= 0, true);
+eq('17件は赤字', monthlyAt(base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; }), 17, {}).left < 0, true);
+Mx = monthlyAt(base(S => { S.sim.kessan = 180000; }), 10, { staff: 100000 });
+eq('決算料は月の数字に入れない', Mx.left, 300000 - 140217 - 100000 - 300000);
+eq('決算料は年間に入る', Mx.annual, Mx.left * 12 + 1800000);
 
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;

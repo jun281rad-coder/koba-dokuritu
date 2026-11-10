@@ -123,6 +123,7 @@ function results(C, plan) {
     effective_monthly_price: round(C.price),
     clients_needed_for_cash_to_grow_every_month: { owner_only: needClients(plan, { living: true }), with_planned_staff: needClients(plan, { staff: C.staffMAll, living: true }), note: '生活費・税金込み。2年目以降の固定費で計算' },
     clients_needed_for_business_in_black: { owner_only: needClients(plan, {}), with_planned_staff: needClients(plan, { staff: C.staffMAll }) },
+    monthly_figures_by_client_count: [5, 10, 15, 20, 25, 30, 40, 50].map(n => { const M = monthlyAt(plan, n, { staff: C.staffMAll }); return { clients: n, advisory_fee: round(M.fee), business_profit: round(M.biz), taxes: round(M.ctax + M.tax), monthly_cash_left: round(M.left), annual_cash_left: round(M.annual) }; }),
     month_black_becomes_stable: C.stableM || null,
     first_month_in_black_incl_living_and_tax: C.firstBlack || null,
     first_month_business_in_black: C.firstBiz || null,

@@ -58,6 +58,8 @@ table.kv td small{display:block;font-size:11px;color:var(--muted);font-family:va
 table.mon td,table.mon th{padding:5px 6px;text-align:right;font-size:12px}
 table.mon td:first-child,table.mon th:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
 table.mon thead th:first-child{background:var(--bg)}
+table.mon tr.sub td:first-child{background:var(--bg)}
+table.mon th .memo{display:block;font-size:10px}
 tr.redrow td{background:var(--red-soft)}
 tr.mark td{border-top:2px solid var(--accent)}
 
@@ -482,7 +484,7 @@ after:function(){
   var head='<div class="sticky"><div class="sum" data-out="sticky"></div><div class="seg" role="tablist"><button role="tab" aria-selected="'+(afterSub==='in')+'" class="'+(afterSub==='in'?'on':'')+'" data-act="sub" data-v="in">前提を入力</button><button role="tab" aria-selected="'+(afterSub==='out')+'" class="'+(afterSub==='out'?'on':'')+'" data-act="sub" data-v="out">結果を見る</button></div></div>';
   if(afterSub==='out') return head+
   '<section><h2>何件で黒字が続くか<small>2年目以降の固定費で計算</small></h2><div class="scroll"><table data-out="needs"></table></div></section>'+
-  '<section><h2>件数ごとの損益<small>'+(plView==='month'?'月間':'年間')+'・千円</small></h2><div class="seg" role="tablist"><button role="tab" aria-selected="'+(plView==='year')+'" class="'+(plView==='year'?'on':'')+'" data-act="plv" data-v="year">年間</button><button role="tab" aria-selected="'+(plView==='month')+'" class="'+(plView==='month'?'on':'')+'" data-act="plv" data-v="month">月間</button></div><div class="scroll"><table class="mon" data-out="bycount"></table></div><p class="note">顧問先がその件数で安定したときの数字。変動費＝1件あたりの変動費＋消費税の納税額（税込経理のため租税公課）。固定費＝月の固定費＋人件費。税引後所得から生活費・国保年金・返済を引いたものが手残り（増える現金）。'+(state.sim.kessan&&state.sim.kessanMode!=='avg'?'月間は決算料が入らない月の数字で、決算料は年間にだけ入れています。':'')+'</p></section>'+
+  '<section><h2>件数ごとの損益<small>'+(plView==='month'?'月間':'年間')+'・千円</small></h2><div class="seg" role="tablist"><button role="tab" aria-selected="'+(plView==='year')+'" class="'+(plView==='year'?'on':'')+'" data-act="plv" data-v="year">年間</button><button role="tab" aria-selected="'+(plView==='month')+'" class="'+(plView==='month'?'on':'')+'" data-act="plv" data-v="month">月間</button></div><div class="scroll"><table class="mon" data-out="bycount"></table></div><p class="note">顧問先がその件数で安定したときの数字。色の付いた列が、手残りが毎月プラスになる件数。ほかの件数を見たいときは、下の「この件数で見る」に入れると、その件数を中心に並び替わります。変動費＝1件あたりの変動費＋消費税の納税額（税込経理のため租税公課）。固定費＝月の固定費＋人件費。税引後所得から生活費・国保年金・返済を引いたものが手残り（増える現金）。'+(state.sim.kessan&&state.sim.kessanMode!=='avg'?'月間は決算料が入らない月の数字で、決算料は年間にだけ入れています。':'')+'</p></section>'+
   '<section><h2>損益の内訳<small>円</small></h2><label class="f" for="viewn">この件数で見る<span class="inp"><input id="viewn" type="text" inputmode="numeric" autocomplete="off" placeholder="空欄なら黒字が続く件数" value="'+(viewN||'')+'"><i>件</i></span></label><div class="scroll"><table data-out="breakdown"></table></div>'+(state.sim.kessan?'<p class="note">'+(state.sim.kessanMode==='avg'?'決算料は月に均す設定なので、月間にも月割で入れています。':'月間は決算料が入らない月の数字。決算料は年間にだけ入れています。')+'</p>':'')+'</section>'+
   '<section><h2>いまの計画の見通し</h2><div class="scroll"><table class="kv" data-out="outlook"></table></div><div class="scroll"><table class="mon" data-out="yearcash"></table></div><p class="note">年別の表は千円単位。収支はその年に増減した現金（生活費・税金を払った後）。</p></section>'+
   '<section style="gap:0"><details><summary>月次の資金繰り表</summary><div><div class="scroll"><table class="mon" data-out="monthly"></table></div><p class="note">単位：千円。収支＝顧問料＋決算料−支出−税金。支出＝固定費＋変動費＋人件費＋生活費＋国保年金＋返済＋採用時の初期費用。開業1〜12か月目の固定費は、開業費用で前払いした年会費等を除いた額。赤地は、決算料の一括入金を除くと赤字の月。採用月は上線つき。</p></div></details>'+
@@ -573,12 +575,26 @@ needs:function(C){
 },
 bycount:function(C){
   var nd=needClients(state,{staff:C.staffMAll,living:true}),cap=isFinite(C.capEnd)?C.capEnd:0;
-  var ns=[5,10,15,20,25,30,40,50,60].filter(function(n){return !cap||n<=Math.max(cap,nd||0)+10});
+  var ns=[];for(var q=5;q<=200;q+=5)ns.push(q);
   [nd,cap,viewN].forEach(function(n){if(n&&ns.indexOf(n)<0)ns.push(n)});
   ns.sort(function(a,b){return a-b});
-  return '<thead><tr><th>件数</th><th>売上</th><th>変動費</th><th>固定費</th><th>税引前<br>所得</th><th>税引後<br>所得</th><th>手残り</th></tr></thead><tbody>'+
-    ns.map(function(n){var M=monthlyAt(state,n,{staff:C.staffMAll}),v=plView==='month'?M.m:M.y;
-      return '<tr class="'+(n===nd?'mark':'')+'"><td class="n">'+n+'件'+(n===nd?'<span class="memo pos">ここから黒字</span>':'')+(n===cap?'<span class="memo">担当上限</span>':'')+'</td><td class="n">'+sen(v.sales)+'</td><td class="n">'+sen(v.varc+v.ctax)+'</td><td class="n">'+sen(v.fix+v.staff)+'</td><td class="n'+cls(v.pre)+'">'+sen(v.pre)+'</td><td class="n'+cls(v.after)+'">'+sen(v.after)+'</td><td class="n'+cls(v.left)+'">'+sen(v.left)+'</td></tr>'}).join('')+'</tbody>';
+  // スマホの幅に収まるよう、見たい件数（指定がなければ黒字になる件数）を中心に5列だけ出す
+  var ci=Math.max(0,ns.indexOf(viewN||nd||15)),st=Math.max(0,Math.min(ns.length-5,ci-2));
+  ns=ns.slice(st,st+5);
+  var V=ns.map(function(n){var M=monthlyAt(state,n,{staff:C.staffMAll});return plView==='month'?M.m:M.y});
+  var hl=function(i){return ns[i]===nd?' style="background:var(--accent-soft)"':''};
+  // 科目を縦に、件数を横に並べる
+  var row=function(label,f,sign,c){return '<tr'+(c?' class="'+c+'"':'')+'><td style="white-space:nowrap">'+label+'</td>'+V.map(function(v,i){var x=sign*f(v);return '<td class="n'+(c==='total'&&x<0?' neg':'')+'"'+hl(i)+'>'+sen(x)+'</td>'}).join('')+'</tr>'};
+  return '<thead><tr><th>科目</th>'+ns.map(function(n,i){return '<th'+hl(i)+'>'+n+'件'+(n===nd?'<span class="memo pos">黒字</span>':n===cap?'<span class="memo">上限</span>':'')+'</th>'}).join('')+'</tr></thead><tbody>'+
+    row('売上',function(v){return v.sales},1)+
+    row('変動費',function(v){return v.varc+v.ctax},-1)+
+    row('限界利益',function(v){return v.sales-v.varc-v.ctax},1,'sub')+
+    row('固定費',function(v){return v.fix+v.staff},-1)+
+    row('税引前所得',function(v){return v.pre},1,'total')+
+    row('所得税等',function(v){return v.tax},-1)+
+    row('税引後所得',function(v){return v.after},1,'total')+
+    row('生活費等',function(v){return v.living+v.kokuho+v.loan},-1)+
+    row('手残り',function(v){return v.left},1,'total')+'</tbody>';
 },
 breakdown:function(C){
   var S=state.sim,n=viewN||needClients(state,{staff:C.staffMAll,living:true})||S.clients,M=monthlyAt(state,n,{staff:C.staffMAll}),m=M.m,y=M.y;

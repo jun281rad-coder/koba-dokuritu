@@ -436,7 +436,7 @@ after:function(){
   '<section><h2>体制の比較<small>同じ前提で並べる</small></h2><div class="scroll"><table data-out="compare"></table></div></section>'+
   '<section><h2>年別の概算<small>単位：千円</small></h2><div class="scroll"><table class="mon" data-out="yearly"></table></div><p class="note">事業の利益＝売上−固定費−人件費−採用時の初期費用−消費税（開業年は開業費用も控除）。青色申告特別控除の前の金額です。</p></section>'+
   '<section><h2>月次の資金繰り表<small>単位：千円</small></h2><div class="scroll"><table class="mon" data-out="monthly"></table></div><p class="note">収支＝顧問料＋決算料−支出−税金。支出＝固定費＋人件費＋生活費＋国保年金＋返済＋採用時の初期費用。開業1〜12か月目の固定費は、開業費用で前払いした年会費等を除いた額。単月黒字化は、決算料を一括入金にしている間は顧問料だけで判定。分配率は決算料を月割にして計算。採用月は上線つき、赤字月は赤地。</p></section>';
-  return head+'<section><h2>前提</h2><div class="btns"><button data-act="preset1">1人版にする</button><button data-act="preset2">2人版にする</button></div><div class="form">'+
+  return head+'<section><h2>前提</h2><div class="form">'+
     inp('sim.clients','開業時の顧問先数',{t:'int',u:'件'})+inp('sim.growth','顧問先の増加',{t:'dec',u:'件/月'})+
     inp('sim.churn','年間の解約率',{t:'dec',u:'%',h:'仮置き。0で解約なし'})+inp('sim.ownerCap','所長が担当できる件数',{t:'int',u:'件',h:'仮置き。0で上限なし。スタッフ分は人員計画で加算'})+
     inp('sim.fee','顧問料 月額単価')+inp('sim.kessan','決算料（年1回・1件）',{h:'180,000円で実効4.5万円'})+
@@ -748,11 +748,6 @@ document.addEventListener('click',function(ev){
   else if(a==='toggle-st'){ev.stopPropagation();var s=byId(state.staff,id);s.on=!s.on;save();refresh()}
   else if(a==='edit-st')editSt(byId(state.staff,id));
   else if(a==='add-st')editSt({id:uid(),label:'',on:true,start:13,monthly:100000,init:180000,cap:0,note:''},true);
-  else if(a==='preset1'||a==='preset2'){
-    state.staff.forEach(function(s){s.on=false});
-    if(a==='preset2'){var v=state.staff.filter(function(s){return /ベテラン/.test(s.label)})[0];if(v){v.on=true;v.start=1}}
-    save();render();
-  }
   else if(a==='sub'){afterSub=t.dataset.v;render();window.scrollTo(0,0)}
   else if(a==='sheet-save')sheetSave();
   else if(a==='sheet-close')closeSheet();

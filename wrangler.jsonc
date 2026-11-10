@@ -5,6 +5,8 @@
   "main": "worker.js",
   "compatibility_date": "2025-10-01",
   "workers_dev": true,
+  // Cloudflare の画面で設定した変数（TOKEN）を、公開のたびに消さずに残す
+  "keep_vars": true,
   // id を書かないと、初回の公開時に Cloudflare が入れ物（KV）を自動で作って割り当てる
   "kv_namespaces": [{ "binding": "PLAN_KV" }]
 }

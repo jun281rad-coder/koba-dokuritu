@@ -163,6 +163,21 @@ Mx = monthlyAt(base(S => { S.sim.kessan = 180000; }), 10, { staff: 100000 });
 eq('決算料は月の数字に入れない', Mx.left, 300000 - 140217 - 100000 - 300000);
 eq('決算料は年間に入る', Mx.annual, Mx.left * 12 + 1800000);
 
+// --- 損益の形（売上・変動費・固定費・税引前所得・税引後所得） ---
+const Sp = base(S => { S.sim.ctaxOn = true; S.sim.itaxOn = true; S.sim.kessan = 180000; S.sim.varCost = 1000; });
+Mx = monthlyAt(Sp, 20, { staff: 100000 });
+eq('売上（年）', Mx.salesY, 20 * 30000 * 12 + 20 * 180000);                      // 10,800,000
+eq('変動費（年）', Mx.varM * 12 + Mx.ctaxY, 20 * 1000 * 12 + 10800000 * 0.045);   // 726,000
+eq('固定費（年）', (Mx.fixed + Mx.staff) * 12, (140217 + 100000) * 12);
+eq('税引前所得（年）', Mx.preY, 10800000 - 726000 - 240217 * 12, 1e-6);
+eq('税引前所得（月・決算料を除く）', Mx.biz, 600000 * 0.955 - 20000 - 240217, 1e-6);
+eq('税引後所得（年）', Mx.afterY, Mx.preY - Mx.taxY, 1e-6);
+eq('手残り（年）', Mx.annual, Mx.afterY - 300000 * 12, 1e-6);
+eq('月と年のつながり', Mx.biz * 12 + Mx.kessanNet, Mx.preY, 1e-6);
+C = calcPlan(base(S => { S.sim.varCost = 1000; }), NOW);
+eq('変動費が支出に入る', C.rows[0].out, 385290 + 5000);
+eq('変動費が税引前所得から引かれる', C.years[0].profit, 2430000 - 85290 * 9 - 81000 - 1233900);
+
 // --- 保存データの移行 ---
 const old = defaults(); old.staff.forEach(x => delete x.cap); old.fixed.forEach(x => delete x.pre); delete old.sim.churn;
 const M = migrate(JSON.parse(JSON.stringify(old)));

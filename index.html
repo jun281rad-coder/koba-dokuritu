@@ -234,7 +234,7 @@ function defaults(){
       {id:uid(),label:'パート（総務専任）',on:false,start:25,monthly:100000,init:180000,cap:0,note:'月額は仮置き'},
       {id:uid(),label:'税務署OB（非常勤）',on:false,start:31,monthly:50000,init:0,cap:0,note:'月額は仮置き。調査立会いはOB本人の税理士登録が前提'}
     ],
-    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0}
+    sim:{clients:5,growth:1,fee:30000,kessan:0,kessanMode:'lump',living:300000,kokuho:0,months:36,buffer:6,autoFunds:true,funds:3900000,loan:0,loanYears:7,loanRate:2.5,ctaxOn:true,ctaxRate:4.5,itaxOn:true,deduct:580000,churn:5,ownerCap:30,slipCost:0,varCost:0}
   };
 }
 function migrate(s){
@@ -268,17 +268,20 @@ function annualTax(S,inc,mon){
 /* 黒字が続くのに必要な顧問先数（2年目以降の固定費で計算）。
    o.staff: 人件費の月額／o.living: 生活費・国保年金・返済・所得税等まで賄うか／o.annual: 年間の合計で見るか（決算料込み）
    o.annual でないときは、決算料が入らない月でも収支がプラスになる件数（決算料を月に均す設定なら月割込み） */
-/* 顧問先が n 件で安定したときの月の収支（2年目以降の固定費）。o.staff: 人件費の月額
-   left＝決算料が入らない月の手残り、annual＝決算料も含めた年間の手残り。金額はすべて円 */
+/* 顧問先が n 件で安定したときの損益（2年目以降の固定費）。o.staff: 人件費の月額。金額はすべて円
+   月の数字（biz・afterM・left）は決算料が入らない月のもの。年の数字（…Y・annual）は決算料を含む
+   変動費＝1件あたりの変動費＋消費税の納税額（税込経理なので租税公課として費用に入る） */
 function monthlyAt(S,n,o){
   o=o||{};
   var fixed=sum(S.fixed,function(x){return x.amt}),staff=o.staff||0,c=S.sim.ctaxOn?S.sim.ctaxRate/100:0;
-  var fee=n*S.sim.fee,kessanY=n*S.sim.kessan,rev=fee*12+kessanY;
-  var tax=annualTax(S,rev*(1-c)-(fixed+staff)*12,12),loanM=loanPayment(S);
-  var biz=fee*(1-c)-fixed-staff;                                   // 事業の利益（月・決算料を除く）
-  var left=biz-S.sim.living-S.sim.kokuho-loanM-tax/12;
-  return {n:n,fee:fee,ctax:fee*c,fixed:fixed,staff:staff,biz:biz,living:S.sim.living,kokuho:S.sim.kokuho,loan:loanM,tax:tax/12,
-    left:left,kessanNet:kessanY*(1-c),annual:left*12+kessanY*(1-c),bizAnnual:biz*12+kessanY*(1-c)};
+  var fee=n*S.sim.fee,kessanY=n*S.sim.kessan,salesY=fee*12+kessanY,varM=n*(S.sim.varCost||0);
+  var biz=fee*(1-c)-varM-fixed-staff;                              // 税引前所得（月・決算料を除く）
+  var preY=biz*12+kessanY*(1-c);                                   // 税引前所得（年）
+  var taxY=annualTax(S,preY,12),loanM=loanPayment(S);
+  var left=biz-taxY/12-S.sim.living-S.sim.kokuho-loanM;
+  return {n:n,fee:fee,kessanY:kessanY,salesY:salesY,varM:varM,ctax:fee*c,ctaxY:salesY*c,fixed:fixed,staff:staff,
+    biz:biz,preY:preY,bizAnnual:preY,tax:taxY/12,taxY:taxY,afterM:biz-taxY/12,afterY:preY-taxY,
+    living:S.sim.living,kokuho:S.sim.kokuho,loan:loanM,left:left,kessanNet:kessanY*(1-c),annual:left*12+kessanY*(1-c)};
 }
 /* 黒字が続くのに必要な顧問先数。o.living: 生活費・国保年金・返済・所得税等まで賄うか（false なら事業の利益だけ）
    o.annual: 決算料も含めた年間の合計で見るか。決算料を月に均す設定のときは、常に年間で見る */
@@ -333,15 +336,15 @@ function calcPlan(S,now,o){
     var cl=have+add;
     var fee=cl*S.sim.fee,kAvg=cl*S.sim.kessan/12,ks=kAvg;
     if(lump) ks=sum(cohorts,function(q){return (m-q.k+1)%12===0?q.n*S.sim.kessan:0});
-    var rev=fee+ks,fxm=fixedAt(m),sm=staffM(m),si=staffI(m),lp=(loan>0&&m<=nPay)?loanPay:0;
-    rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,capped:capped,fee:fee,ks:ks,rev:rev,revA:fee+kAvg,fx:fxm,staff:sm,init:si,
-      out:fxm+sm+si+S.sim.living+S.sim.kokuho+lp,ctax:S.sim.ctaxOn?rev*S.sim.ctaxRate/100:0,itax:0,
+    var rev=fee+ks,fxm=fixedAt(m),sm=staffM(m),si=staffI(m),lp=(loan>0&&m<=nPay)?loanPay:0,vr=cl*(S.sim.varCost||0);
+    rows.push({m:m,ym:ymAdd(open,m-1),clients:cl,capped:capped,fee:fee,ks:ks,rev:rev,revA:fee+kAvg,fx:fxm,vr:vr,staff:sm,init:si,
+      out:fxm+vr+sm+si+S.sim.living+S.sim.kokuho+lp,ctax:S.sim.ctaxOn?rev*S.sim.ctaxRate/100:0,itax:0,
       ratio:(fee+kAvg)>0?sm/(fee+kAvg):0,hire:staffOn.filter(function(s){return s.start===m})});
   }
   // 2) 所得税・住民税・個人事業税（暦年ごとの概算を、その年の月に均して積み立てる）
   var years=[],ymap={};
   rows.forEach(function(r){var y=r.ym.slice(0,4);if(!ymap[y]){ymap[y]={y:y,n:0,rev:0,profit:0,ctax:0,tax:0,rows:[]};years.push(ymap[y])}
-    var Y=ymap[y];Y.n++;Y.rev+=r.rev;Y.ctax+=r.ctax;Y.profit+=r.rev-r.fx-r.staff-r.init-r.ctax;Y.rows.push(r)});
+    var Y=ymap[y];Y.n++;Y.rev+=r.rev;Y.ctax+=r.ctax;Y.profit+=r.rev-r.fx-r.vr-r.staff-r.init-r.ctax;Y.rows.push(r)});
   if(years.length) years[0].profit-=openCost;
   var carry=0;
   years.forEach(function(Y,idx){
@@ -360,7 +363,7 @@ function calcPlan(S,now,o){
     var basis=lump?r.fee:r.revA;
     r.red=basis-(r.out-r.init)-r.tax<0;          // 決算料の一括入金と採用時の初期費用を除いて赤字か
     if(r.red) lastRed=r.m; else if(!firstBlack) firstBlack=r.m;
-    if(!firstBiz&&basis-r.fx-r.staff-r.ctax>=0) firstBiz=r.m;
+    if(!firstBiz&&basis-r.fx-r.vr-r.staff-r.ctax>=0) firstBiz=r.m;
   });
   var fixed1=fixedAt(1),month1=fixed1+staffM(1)+S.sim.living+S.sim.kokuho;
   var required=openCost+staffI(1)+month1*S.sim.buffer;
@@ -471,17 +474,18 @@ after:function(){
   var head='<div class="sticky"><div class="sum" data-out="sticky"></div><div class="seg" role="tablist"><button role="tab" aria-selected="'+(afterSub==='in')+'" class="'+(afterSub==='in'?'on':'')+'" data-act="sub" data-v="in">前提を入力</button><button role="tab" aria-selected="'+(afterSub==='out')+'" class="'+(afterSub==='out'?'on':'')+'" data-act="sub" data-v="out">結果を見る</button></div></div>';
   if(afterSub==='out') return head+
   '<section><h2>何件で黒字が続くか<small>2年目以降の固定費で計算</small></h2><div class="scroll"><table data-out="needs"></table></div></section>'+
-  '<section><h2>件数ごとの収支<small>月額・千円</small></h2><div class="scroll"><table class="mon" data-out="bycount"></table></div><p class="note">顧問先がその件数で安定したときの1か月の数字。事業の利益＝顧問料−消費税−固定費−人件費。手残り＝事業の利益−生活費−国保年金−返済−所得税等。'+(state.sim.kessan?'決算料は月の数字に入れず、年間の手残りに入れています。':'')+'</p></section>'+
-  '<section><h2>内訳<small>月額・円</small></h2><label class="f" for="viewn">この件数で見る<span class="inp"><input id="viewn" type="text" inputmode="numeric" autocomplete="off" placeholder="空欄なら黒字が続く件数" value="'+(viewN||'')+'"><i>件</i></span></label><div class="scroll"><table data-out="breakdown"></table></div></section>'+
+  '<section><h2>件数ごとの損益<small>年額・千円</small></h2><div class="scroll"><table class="mon" data-out="bycount"></table></div><p class="note">顧問先がその件数で安定した1年間の数字。変動費＝1件あたりの変動費＋消費税の納税額（税込経理のため租税公課）。固定費＝月の固定費＋人件費。税引後所得から生活費・国保年金・返済を引いたものが手残り（増える現金）。</p></section>'+
+  '<section><h2>損益の内訳<small>円</small></h2><label class="f" for="viewn">この件数で見る<span class="inp"><input id="viewn" type="text" inputmode="numeric" autocomplete="off" placeholder="空欄なら黒字が続く件数" value="'+(viewN||'')+'"><i>件</i></span></label><div class="scroll"><table data-out="breakdown"></table></div>'+(state.sim.kessan?'<p class="note">月額は決算料が入らない月の数字。決算料は年額にだけ入れています。</p>':'')+'</section>'+
   '<section><h2>いまの計画の見通し</h2><div class="scroll"><table class="kv" data-out="outlook"></table></div><div class="scroll"><table class="mon" data-out="yearcash"></table></div><p class="note">年別の表は千円単位。収支はその年に増減した現金（生活費・税金を払った後）。</p></section>'+
-  '<section style="gap:0"><details><summary>月次の資金繰り表</summary><div><div class="scroll"><table class="mon" data-out="monthly"></table></div><p class="note">単位：千円。収支＝顧問料＋決算料−支出−税金。支出＝固定費＋人件費＋生活費＋国保年金＋返済＋採用時の初期費用。開業1〜12か月目の固定費は、開業費用で前払いした年会費等を除いた額。赤地は、決算料の一括入金を除くと赤字の月。採用月は上線つき。</p></div></details>'+
+  '<section style="gap:0"><details><summary>月次の資金繰り表</summary><div><div class="scroll"><table class="mon" data-out="monthly"></table></div><p class="note">単位：千円。収支＝顧問料＋決算料−支出−税金。支出＝固定費＋変動費＋人件費＋生活費＋国保年金＋返済＋採用時の初期費用。開業1〜12か月目の固定費は、開業費用で前払いした年会費等を除いた額。赤地は、決算料の一括入金を除くと赤字の月。採用月は上線つき。</p></div></details>'+
   '<details><summary>体制の比較（1人・2人）</summary><div><div class="scroll"><table data-out="compare"></table></div></div></details>'+
-  '<details><summary>税金と利益の内訳</summary><div><div class="scroll"><table class="mon" data-out="yearly"></table></div><p class="note">単位：千円。事業の利益＝売上−固定費−人件費−採用時の初期費用−消費税（開業年は開業費用も控除）。青色申告特別控除の前の金額です。</p></div></details>'+
+  '<details><summary>税金と利益の内訳</summary><div><div class="scroll"><table class="mon" data-out="yearly"></table></div><p class="note">単位：千円。税引前所得＝売上−変動費−固定費−人件費−採用時の初期費用−消費税（開業年は開業費用も控除）。青色申告特別控除の前の金額です。</p></div></details>'+
   '<details><summary>その他の数字</summary><div><div class="scroll"><table class="kv" data-out="aftersum"></table></div></div></details></section>';
   return head+'<section><h2>前提</h2><div class="form">'+
     inp('sim.clients','開業時の顧問先数',{t:'int',u:'件'})+inp('sim.growth','顧問先の増加',{t:'dec',u:'件/月'})+
     inp('sim.churn','年間の解約率',{t:'dec',u:'%',h:'仮置き。0で解約なし'})+inp('sim.ownerCap','所長が担当できる件数',{t:'int',u:'件',h:'仮置き。0で上限なし。スタッフ分は人員計画で加算'})+
     inp('sim.fee','顧問料 月額単価')+inp('sim.kessan','決算料（年1回・1件）',{h:'180,000円で実効4.5万円'})+
+    inp('sim.varCost','変動費（1件あたり・月）',{full:1,h:'外注費・口座振替手数料・紹介手数料など。仮置き0円。消費税の納税額は別に変動費として自動計算'})+
     inp('sim.living','生活費（月）')+inp('sim.kokuho','国保・国民年金（月）',{h:'国民年金は1人 月約1.8万円。国保は前年の所得で決まる'})+
     '<label class="f" for="i_kmode">決算料の入金<span class="inp"><select id="i_kmode" data-b="sim.kessanMode" data-t="str"><option value="lump"'+(S.kessanMode!=='avg'?' selected':'')+'>契約12か月目に一括</option><option value="avg"'+(S.kessanMode==='avg'?' selected':'')+'>毎月に均す</option></select></span></label>'+
     '<label class="f" for="i_months">試算する期間<span class="inp"><select id="i_months" data-b="sim.months" data-t="sel">'+[12,24,36,60].map(function(n){return '<option value="'+n+'"'+(S.months===n?' selected':'')+'>'+n+'か月</option>'}).join('')+'</select></span></label>'+
@@ -552,36 +556,43 @@ needs:function(C){
   var S=state.sim,cols=[['所長1人',0,S.ownerCap]];
   if(C.staffMAll) cols.push(['いまの人員計画',C.staffMAll,C.capEnd]);
   var cell=function(n,cap){return n==null?'<span class="neg">算出不可</span>':n+'件'+(cap>0&&isFinite(cap)&&n>cap?'<span class="memo neg">担当上限 '+cap+'件を超える</span>':'')};
-  var R=[['毎月キャッシュが増える件数<span class="memo">生活費・税金込み'+(S.kessan&&S.kessanMode!=='avg'?'。決算料が入らない月も黒字':'')+'</span>',function(c){return cell(needClients(state,{staff:c[1],living:true}),c[2])}]];
-  if(S.kessan&&S.kessanMode!=='avg') R.push(['年間でキャッシュが増える件数<span class="memo">決算料込みの年間収支がプラス</span>',function(c){return cell(needClients(state,{staff:c[1],living:true,annual:true}),c[2])}]);
-  R.push(['事業だけで黒字になる件数<span class="memo">生活費・所得税等を除く</span>',function(c){return cell(needClients(state,{staff:c[1]}),c[2])}]);
+  var R=[['手残りが毎月プラスになる件数<span class="memo">税引後所得から生活費まで引いた後'+(S.kessan&&S.kessanMode!=='avg'?'。決算料が入らない月も黒字':'')+'</span>',function(c){return cell(needClients(state,{staff:c[1],living:true}),c[2])}]];
+  if(S.kessan&&S.kessanMode!=='avg') R.push(['手残りが年間でプラスになる件数<span class="memo">決算料込み</span>',function(c){return cell(needClients(state,{staff:c[1],living:true,annual:true}),c[2])}]);
+  R.push(['税引前所得が黒字になる件数<span class="memo">生活費・所得税等を引く前</span>',function(c){return cell(needClients(state,{staff:c[1]}),c[2])}]);
   R.push(['担当できる件数',function(c){return c[2]>0&&isFinite(c[2])?c[2]+'件':'上限なし'}]);
   return '<thead><tr><th></th>'+cols.map(function(c){return '<th class="r">'+c[0]+'</th>'}).join('')+'</tr></thead><tbody>'+
     R.map(function(r){return '<tr><td>'+r[0]+'</td>'+cols.map(function(c){return '<td class="r n">'+r[1](c)+'</td>'}).join('')+'</tr>'}).join('')+'</tbody>';
 },
 bycount:function(C){
-  var S=state.sim,nd=needClients(state,{staff:C.staffMAll,living:true}),cap=isFinite(C.capEnd)?C.capEnd:0;
+  var nd=needClients(state,{staff:C.staffMAll,living:true}),cap=isFinite(C.capEnd)?C.capEnd:0;
   var ns=[5,10,15,20,25,30,40,50,60].filter(function(n){return !cap||n<=Math.max(cap,nd||0)+10});
   [nd,cap,viewN].forEach(function(n){if(n&&ns.indexOf(n)<0)ns.push(n)});
   ns.sort(function(a,b){return a-b});
-  return '<thead><tr><th>件数</th><th>顧問料</th><th>事業の利益</th><th>税金</th><th>月の手残り</th><th>年間の手残り</th></tr></thead><tbody>'+
+  return '<thead><tr><th>件数</th><th>売上</th><th>変動費</th><th>固定費</th><th>税引前<br>所得</th><th>税引後<br>所得</th><th>手残り</th></tr></thead><tbody>'+
     ns.map(function(n){var M=monthlyAt(state,n,{staff:C.staffMAll});
-      return '<tr class="'+(n===nd?'mark':'')+'"><td class="n">'+n+'件'+(n===nd?'<span class="memo pos">ここから黒字</span>':'')+(n===cap?'<span class="memo">担当上限</span>':'')+'</td><td class="n">'+sen(M.fee)+'</td><td class="n'+cls(M.biz)+'">'+sen(M.biz)+'</td><td class="n">'+sen(M.ctax+M.tax)+'</td><td class="n'+cls(M.left)+'">'+sen(M.left)+'</td><td class="n'+cls(M.annual)+'">'+sen(M.annual)+'</td></tr>'}).join('')+'</tbody>';
+      return '<tr class="'+(n===nd?'mark':'')+'"><td class="n">'+n+'件'+(n===nd?'<span class="memo pos">ここから黒字</span>':'')+(n===cap?'<span class="memo">担当上限</span>':'')+'</td><td class="n">'+sen(M.salesY)+'</td><td class="n">'+sen(M.varM*12+M.ctaxY)+'</td><td class="n">'+sen((M.fixed+M.staff)*12)+'</td><td class="n'+cls(M.preY)+'">'+sen(M.preY)+'</td><td class="n'+cls(M.afterY)+'">'+sen(M.afterY)+'</td><td class="n'+cls(M.annual)+'">'+sen(M.annual)+'</td></tr>'}).join('')+'</tbody>';
 },
 breakdown:function(C){
   var S=state.sim,n=viewN||needClients(state,{staff:C.staffMAll,living:true})||S.clients,M=monthlyAt(state,n,{staff:C.staffMAll});
-  var r=function(a,v,c){return '<tr'+(c?' class="'+c+'"':'')+'><td>'+a+'</td><td class="r n'+(c&&v<0?' neg':'')+'">'+yen(v)+'</td></tr>'};
-  return '<thead><tr><th>顧問先 '+n+'件のとき</th><th class="r">月額（円）</th></tr></thead><tbody>'+
-    r('顧問料<span class="memo">'+n+'件 × '+yen(S.fee)+'円</span>',M.fee)+
-    (M.ctax?r('消費税の納税<span class="memo">税込売上の'+S.ctaxRate+'%</span>',-M.ctax):'')+
-    r('固定費<span class="memo">2年目以降の月額</span>',-M.fixed)+
-    (M.staff?r('人件費<span class="memo">いまの人員計画</span>',-M.staff):'')+
-    r('事業の利益',M.biz,'sub')+
-    r('生活費',-M.living)+(M.kokuho?r('国保・国民年金',-M.kokuho):'')+(M.loan?r('借入の返済',-M.loan):'')+
-    (S.itaxOn?r('所得税・住民税・事業税<span class="memo">年額 '+yen(M.tax*12)+'円の月割</span>',-M.tax):'')+
-    r('月の手残り（増える現金）',M.left,'total')+
-    (M.kessanNet?r('決算料（年1回）<span class="memo">'+n+'件 × '+yen(S.kessan)+'円。消費税を引いた後</span>',M.kessanNet):'')+
-    r('年間の手残り'+(M.kessanNet?'<span class="memo">月の手残り × 12 ＋ 決算料</span>':'<span class="memo">月の手残り × 12</span>'),M.annual,'sub')+'</tbody>';
+  var r=function(a,m,y,c){return '<tr'+(c?' class="'+c+'"':'')+'><td>'+a+'</td><td class="r n'+(c==='total'&&m<0?' neg':'')+'">'+(m==null?'―':yen(m))+'</td><td class="r n'+(c==='total'&&y<0?' neg':'')+'">'+yen(y)+'</td></tr>'};
+  var g=function(t){return '<tr class="grp"><td colspan="3">'+t+'</td></tr>'};
+  var varM=M.varM+M.ctax,varY=M.varM*12+M.ctaxY,fixM=M.fixed+M.staff;
+  return '<thead><tr><th>顧問先 '+n+'件のとき</th><th class="r">月額</th><th class="r">年額</th></tr></thead><tbody>'+
+    g('売上')+r('顧問料<span class="memo">'+n+'件 × '+yen(S.fee)+'円</span>',M.fee,M.fee*12)+
+    (M.kessanY?r('決算料<span class="memo">'+n+'件 × '+yen(S.kessan)+'円・年1回</span>',null,M.kessanY):'')+
+    r('売上 計',M.fee,M.salesY,'sub')+
+    g('変動費')+(M.varM?r('1件あたりの変動費<span class="memo">'+n+'件 × '+yen(S.varCost)+'円</span>',-M.varM,-M.varM*12):'')+
+    r('消費税の納税<span class="memo">'+(S.ctaxOn?'税込売上の'+S.ctaxRate+'%・租税公課':'免税事業者として計算')+'</span>',-M.ctax,-M.ctaxY)+
+    r('変動費 計',-varM,-varY,'sub')+
+    r('限界利益',M.fee-varM,M.salesY-varY,'sub')+
+    g('固定費')+r('月の固定費<span class="memo">2年目以降</span>',-M.fixed,-M.fixed*12)+
+    (M.staff?r('人件費<span class="memo">いまの人員計画</span>',-M.staff,-M.staff*12):'')+
+    r('固定費 計',-fixM,-fixM*12,'sub')+
+    r('税引前所得',M.biz,M.preY,'total')+
+    r('所得税・住民税・事業税'+(S.itaxOn?'':'<span class="memo">計算に入れない設定</span>'),-M.tax,-M.taxY)+
+    r('税引後所得',M.afterM,M.afterY,'total')+
+    g('生活に使うお金')+r('生活費',-M.living,-M.living*12)+(M.kokuho?r('国保・国民年金',-M.kokuho,-M.kokuho*12):'')+(M.loan?r('借入の返済',-M.loan,-M.loan*12):'')+
+    r('手残り（増える現金）',M.left,M.annual,'total')+'</tbody>';
 },
 outlook:function(C){
   var last=C.rows[C.N-1],st=C.stableM?C.rows[C.stableM-1]:null;
@@ -713,7 +724,7 @@ compare:function(C){
     R.map(function(r){return '<tr><td>'+r[0]+'</td>'+cols.map(function(c){return '<td class="r n">'+r[1](c[1])+'</td>'}).join('')+'</tr>'}).join('')+'</tbody>';
 },
 yearly:function(C){
-  return '<thead><tr><th>年</th><th>売上</th><th>事業の利益</th><th>所得税等</th><th>消費税</th></tr></thead><tbody>'+
+  return '<thead><tr><th>年</th><th>売上</th><th>税引前所得</th><th>所得税等</th><th>消費税</th></tr></thead><tbody>'+
     C.years.map(function(Y){return '<tr><td class="n">'+Y.y+'<span class="memo">'+Y.n+'か月</span></td><td class="n">'+sen(Y.rev)+'</td><td class="n'+cls(Y.profit)+'">'+sen(Y.profit)+'</td><td class="n">'+sen(Y.tax)+'</td><td class="n">'+sen(Y.ctax)+'</td></tr>'}).join('')+'</tbody>';
 },
 monthly:function(C){
